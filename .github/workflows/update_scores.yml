@@ -1,0 +1,33 @@
+name: Update Fantasy Scores
+
+on:
+  # 1. Allow manual trigger (button press) for testing
+  workflow_dispatch:
+  # 2. Schedule it automatically
+  schedule:
+    # Runs at 11:00 PM UTC every Sunday (Approx 6PM EST / 3PM PST)
+    - cron: '0 4 * * 1'
+
+jobs:
+  update-scores:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install Dependencies
+      run: |
+        pip install requests beautifulsoup4 supabase
+
+    - name: Run Scoring Script
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      run: |
+        python scripts/update_scores.py
