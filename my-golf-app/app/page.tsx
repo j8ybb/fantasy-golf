@@ -71,7 +71,7 @@ export default function HomePage() {
             roster.player_1, roster.player_2, roster.player_3,
             roster.player_4, roster.player_5, roster.player_6
           ]
-          setExistingTeam(team)
+          setExistingTeam(team as any)
         }
       }
 
