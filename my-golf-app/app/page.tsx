@@ -245,7 +245,18 @@ export default function HomePage() {
     #{player.world_rank}
   </div>
   <div>
-    <span className="text-xl mr-2">{player.flag || '🏳️'}</span> {/* The Flag */}
+    {player.flag ? (
+  <img 
+    src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`}
+    srcSet={`https://flagcdn.com/48x36/${player.flag.toLowerCase()}.png 2x`}
+    width="24" 
+    height="18" 
+    alt={player.flag}
+    className="mr-3 rounded shadow-sm inline-block"
+  />
+) : (
+  <span className="text-xl mr-2">🏳️</span>
+)}
     <span className="font-bold text-lg text-gray-800">{player.name}</span> {/* The Name */}
   </div>
 </div>
