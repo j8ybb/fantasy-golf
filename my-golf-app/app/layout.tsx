@@ -33,7 +33,7 @@ export default function RootLayout({
               {/* Menu Links */}
               <div className="hidden md:flex space-x-8">
                 <Link href="/" className="font-display uppercase tracking-widest hover:text-yellow-400 transition-colors text-sm">
-                  Draft / Home
+                  Home
                 </Link>
                 <Link href="/team" className="font-display uppercase tracking-widest hover:text-yellow-400 transition-colors text-sm">
                   Manage Team
@@ -45,9 +45,9 @@ export default function RootLayout({
 
               {/* Mobile Menu (Simple) */}
               <div className="md:hidden flex space-x-4 text-xs font-bold uppercase">
-                <Link href="/">Draft</Link>
+                <Link href="/">Home</Link>
                 <Link href="/team">Team</Link>
-                <Link href="/leaderboard">Rank</Link>
+                <Link href="/leaderboard">Table</Link>
               </div>
             </div>
           </div>

@@ -50,7 +50,7 @@ export default function Navbar() {
           {/* IF YOU WANT TO FORCE THE LOGOUT BUTTON TO SHOW FOR TESTING:
               Change the line below from "{user ? (" to "{true ? (" 
           */}
-          {user ? (
+          {true ? (
             <button 
               onClick={handleLogout} 
               className="bg-green-800 border border-green-600 px-3 py-1 rounded hover:bg-green-700 transition text-xs tracking-widest"
