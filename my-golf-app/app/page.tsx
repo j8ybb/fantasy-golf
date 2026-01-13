@@ -2,23 +2,30 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import Link from 'next/link' // <--- Added for navigation
 
 type Golfer = {
   id: number
   name: string
   cost: number
   world_rank: number
-  flag: string | null // <--- Add this line
+  flag: string | null
 }
 
 export default function HomePage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   
+  // Team Data
   const [existingTeam, setExistingTeam] = useState<Golfer[] | null>(null)
   const [myTeamName, setMyTeamName] = useState('')
   const [myManagerName, setMyManagerName] = useState('')
+  
+  // NEW: Dashboard Stats State
+  const [seasonPoints, setSeasonPoints] = useState(0)
+  const [seasonRank, setSeasonRank] = useState(0)
 
+  // Draft Data
   const [golfers, setGolfers] = useState<Golfer[]>([])
   const [draftTeam, setDraftTeam] = useState<Golfer[]>([])
   const [draftName, setDraftName] = useState('')
@@ -35,6 +42,7 @@ export default function HomePage() {
       setUser(user)
 
       if (user) {
+        // 1. Get Profile
         const { data: profile } = await supabase
           .from('profiles')
           .select('team_name, manager_name')
@@ -46,6 +54,7 @@ export default function HomePage() {
             setMyManagerName(profile.manager_name)
         }
 
+        // 2. Get Roster
         const { data: roster } = await supabase
           .from('season_rosters')
           .select(`
@@ -65,9 +74,18 @@ export default function HomePage() {
             roster.player_4, roster.player_5, roster.player_6
           ]
           setExistingTeam(team as any)
+
+          // -------------------------------------------------------------
+          // NEW: Get Dashboard Stats (Points & Rank)
+          // -------------------------------------------------------------
+          // TODO: Replace this with real DB fetch once your scores table is ready.
+          // For now, we mock it so the UI works.
+          setSeasonPoints(1250) 
+          setSeasonRank(5)      
         }
       }
 
+      // 3. Get Golfers for Draft
       const { data: allGolfers } = await supabase
         .from('golfers')
         .select('*')
@@ -125,6 +143,13 @@ export default function HomePage() {
     }
   }
 
+  // Helper for "1st", "2nd", "3rd"
+  const getOrdinal = (n: number) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+  }
+
   const currentSpend = draftTeam.reduce((sum, p) => sum + p.cost, 0)
   const remainingBudget = (BUDGET - currentSpend).toFixed(1)
   const filteredGolfers = golfers.filter(g => g.name.toLowerCase().includes(search.toLowerCase()))
@@ -138,35 +163,94 @@ export default function HomePage() {
   // --- VIEW 1: ALREADY HAS TEAM (DASHBOARD) ---
   if (existingTeam) {
     return (
-      <div className="min-h-screen pb-12">
-        {/* HEADER BANNER */}
-        <div className="bg-green-900 text-white py-12 px-6 shadow-xl border-b-4 border-yellow-500">
-          <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-             <div className="text-center md:text-left">
-               <h1 className="text-4xl md:text-6xl font-display uppercase tracking-wider">{myTeamName || 'My Team'}</h1>
-               <p className="text-green-200 font-medium tracking-widest uppercase text-sm mt-2">Manager: {myManagerName}</p>
-             </div>
-             <div className="bg-white/10 backdrop-blur-sm px-6 py-3 rounded-lg border border-white/20">
-               <div className="text-xs text-green-200 uppercase tracking-widest">Total Value</div>
-               <div className="text-3xl font-display text-yellow-400">
-                  ${existingTeam.reduce((acc, p) => acc + p.cost, 0).toFixed(1)}m
+      <div className="min-h-screen pb-12 bg-gray-50">
+        {/* HEADER DASHBOARD BANNER */}
+        <div className="bg-green-900 text-white shadow-xl border-b-4 border-yellow-500 relative overflow-hidden">
+          {/* Background Pattern (Optional) */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+          
+          <div className="max-w-6xl mx-auto py-8 px-6">
+            <div className="flex flex-col lg:flex-row justify-between items-end gap-6">
+               
+               {/* Left: Team Info */}
+               <div className="w-full lg:w-auto">
+                 <p className="text-green-300 font-bold uppercase tracking-widest text-xs mb-1">Manager: {myManagerName}</p>
+                 <h1 className="text-4xl md:text-5xl font-display uppercase tracking-wider text-white leading-tight">
+                    {myTeamName || 'My Team'}
+                 </h1>
+                 
+                 {/* Navigation Link to Season Summary */}
+                 <div className="mt-4">
+                    <Link href="/season-summary" className="inline-flex items-center text-sm font-semibold text-yellow-400 hover:text-yellow-300 transition">
+                        View Full Season History &rarr;
+                    </Link>
+                 </div>
                </div>
-             </div>
+
+               {/* Right: Stats Grid */}
+               <div className="w-full lg:w-auto flex flex-wrap md:flex-nowrap gap-4">
+                  
+                  {/* Card 1: Total Points */}
+                  <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-lg p-4 flex-1 lg:min-w-[140px] text-center">
+                    <div className="text-xs text-green-200 uppercase tracking-widest font-semibold">Total Points</div>
+                    <div className="text-3xl font-display text-white mt-1">
+                      {seasonPoints.toLocaleString()}
+                    </div>
+                  </div>
+
+                  {/* Card 2: Rank */}
+                  <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-lg p-4 flex-1 lg:min-w-[140px] text-center relative">
+                     <div className="text-xs text-green-200 uppercase tracking-widest font-semibold">Rank</div>
+                     <div className="text-3xl font-display text-yellow-400 mt-1">
+                        {seasonRank}<span className="text-base align-top ml-0.5">{getOrdinal(seasonRank)}</span>
+                     </div>
+                  </div>
+
+                  {/* Card 3: Team Value */}
+                  <div className="bg-green-800/50 backdrop-blur-md border border-white/5 rounded-lg p-4 flex-1 lg:min-w-[140px] text-center">
+                    <div className="text-xs text-green-200 uppercase tracking-widest font-semibold">Team Value</div>
+                    <div className="text-3xl font-display text-white mt-1">
+                      ${existingTeam.reduce((acc, p) => acc + p.cost, 0).toFixed(1)}m
+                    </div>
+                  </div>
+
+               </div>
+            </div>
           </div>
         </div>
 
         {/* ROSTER CARDS */}
-        <div className="max-w-5xl mx-auto px-6 -mt-8">
+        <div className="max-w-6xl mx-auto px-6 mt-8">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-display text-green-800 uppercase tracking-wide">Starting Lineup</h2>
+            <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+               6 Players Active
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {existingTeam.map((player) => (
-              <div key={player.id} className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden hover:shadow-xl transition-shadow duration-300">
-                <div className="bg-gray-50 p-4 border-b flex justify-between items-center">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">World Rank #{player.world_rank}</span>
+              <div key={player.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 group">
+                <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center group-hover:bg-green-50 transition">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">World Rank #{player.world_rank}</span>
                   <span className="font-display text-xl text-green-700">${player.cost.toFixed(1)}m</span>
                 </div>
                 <div className="p-6">
-                  <h3 className="text-2xl font-bold text-gray-800 mb-1">{player.name}</h3>
-                  <div className="w-12 h-1 bg-yellow-400 rounded-full mt-2"></div>
+                  <div className="flex items-center gap-3 mb-2">
+                     {player.flag && (
+                        <img 
+                            src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`}
+                            width="20" 
+                            height="15" 
+                            alt="flag"
+                            className="rounded shadow-sm opacity-80"
+                        />
+                     )}
+                     <h3 className="text-xl font-bold text-gray-800">{player.name}</h3>
+                  </div>
+                  <div className="w-full bg-gray-100 h-1.5 rounded-full mt-3 overflow-hidden">
+                     <div className="h-full bg-yellow-400 w-2/3"></div> {/* Mock form bar */}
+                  </div>
                 </div>
               </div>
             ))}
@@ -239,27 +323,26 @@ export default function HomePage() {
                 const isSelected = draftTeam.some(p => p.id === player.id)
                 return (
                   <div key={player.id} className={`flex justify-between items-center p-4 rounded-lg border transition-all duration-200 ${isSelected ? 'bg-green-50 border-green-200 opacity-50' : 'bg-white border-gray-100 hover:border-green-300 hover:shadow-md'}`}>
-                    {/* Inside the map function... */}
-<div className="flex items-center gap-4">
-  <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-500 shadow-sm">
-    #{player.world_rank}
-  </div>
-  <div>
-    {player.flag ? (
-  <img 
-    src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`}
-    srcSet={`https://flagcdn.com/48x36/${player.flag.toLowerCase()}.png 2x`}
-    width="24" 
-    height="18" 
-    alt={player.flag}
-    className="mr-3 rounded shadow-sm inline-block"
-  />
-) : (
-  <span className="text-xl mr-2">🏳️</span>
-)}
-    <span className="font-bold text-lg text-gray-800">{player.name}</span> {/* The Name */}
-  </div>
-</div>
+                    <div className="flex items-center gap-4">
+                      <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-500 shadow-sm">
+                        #{player.world_rank}
+                      </div>
+                      <div>
+                        {player.flag ? (
+                          <img 
+                            src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`}
+                            srcSet={`https://flagcdn.com/48x36/${player.flag.toLowerCase()}.png 2x`}
+                            width="24" 
+                            height="18" 
+                            alt={player.flag}
+                            className="mr-3 rounded shadow-sm inline-block"
+                          />
+                        ) : (
+                          <span className="text-xl mr-2">🏳️</span>
+                        )}
+                        <span className="font-bold text-lg text-gray-800">{player.name}</span>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-4">
                       <span className="font-display text-xl text-green-700">${player.cost.toFixed(1)}m</span>
                       <button 
