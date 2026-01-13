@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function MyTeam() {
   const [roster, setRoster] = useState<any[]>([])
@@ -14,20 +15,19 @@ export default function MyTeam() {
   const [playerOut, setPlayerOut] = useState<number | null>(null)
   const [playerIn, setPlayerIn] = useState<number | null>(null)
   
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  
   const supabase = createClient()
   const router = useRouter()
-
-  // Change this manually each week, or we can build an admin tool later
   const CURRENT_WEEK = 1 
 
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Get Current User
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return router.push('/login')
 
-      // 2. Fetch Season Roster
+      // 1. Fetch Season Roster
       const { data: teamData } = await supabase
         .from('season_rosters')
         .select(`
@@ -39,27 +39,26 @@ export default function MyTeam() {
           player_6:golfers!season_rosters_player_6_id_fkey(*)
         `)
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle() // Use maybeSingle to avoid errors if no team exists
 
       if (teamData) {
-        const myPlayers = [
+        setRoster([
           teamData.player_1, teamData.player_2, teamData.player_3,
           teamData.player_4, teamData.player_5, teamData.player_6
-        ]
-        setRoster(myPlayers)
+        ])
       }
 
-      // 3. Fetch All Golfers (for Wildcard options)
+      // 2. Fetch All Golfers
       const { data: golfers } = await supabase.from('golfers').select('*').order('cost', { ascending: false })
       if (golfers) setAllGolfers(golfers)
 
-      // 4. Fetch Existing Choices for this Week
+      // 3. Fetch Choices
       const { data: choices } = await supabase
         .from('weekly_choices')
         .select('*')
         .eq('user_id', user.id)
         .eq('week_number', CURRENT_WEEK)
-        .single()
+        .maybeSingle()
 
       if (choices) {
         setCaptainId(choices.captain_id)
@@ -69,11 +68,14 @@ export default function MyTeam() {
           setPlayerIn(choices.wildcard_in_id)
         }
       }
+      setLoading(false)
     }
     fetchData()
   }, [])
 
   const saveChoices = async () => {
+    if (!captainId) return alert('⚠️ Please select a Captain first!')
+
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -86,99 +88,147 @@ export default function MyTeam() {
       wildcard_in_id: wildcardActive ? playerIn : null
     }
 
-    // Upsert = Insert or Update if exists
     const { error } = await supabase.from('weekly_choices').upsert(payload, { onConflict: 'user_id, week_number' })
 
     setSaving(false)
-    if (!error) alert('✅ Tactics Saved!')
+    if (!error) alert('✅ Tactics Saved Successfully!')
     else alert('❌ Error saving tactics')
+  }
+
+  if (loading) return <div className="p-10 text-center font-display text-green-800 animate-pulse">Loading Locker Room...</div>
+
+  // ERROR STATE: User has not drafted a team yet
+  if (roster.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-md">
+          <div className="text-6xl">⛳</div>
+          <h1 className="text-2xl font-bold text-gray-800">No Team Found</h1>
+          <p className="text-gray-600">You need to draft your season squad before you can set weekly tactics.</p>
+          <Link href="/" className="block bg-green-800 text-white py-3 px-6 rounded-lg font-bold hover:bg-green-700 transition">
+            Go to Draft Room
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <div className="bg-green-900 text-white py-8 px-6 border-b-4 border-yellow-500">
-        <h1 className="text-3xl font-display uppercase">Week {CURRENT_WEEK} Tactics</h1>
-        <p className="text-green-200">Select your Captain and play your Wildcard.</p>
-      </div>
-
-      <div className="max-w-3xl mx-auto px-4 mt-8 space-y-8">
+      <div className="max-w-4xl mx-auto px-4 mt-8 space-y-8">
         
-        {/* SECTION 1: CAPTAIN SELECTION */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-display text-green-900 uppercase">Week {CURRENT_WEEK} Strategy</h1>
+          <p className="text-gray-500">Lock in your adjustments before the first tee time.</p>
+        </div>
+
+        {/* SECTION 1: CAPTAIN */}
+        <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-yellow-500">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-            <span className="text-2xl mr-2">👑</span> Select Captain (2x Points)
+            <span className="bg-yellow-100 text-yellow-700 p-2 rounded-lg mr-3 text-2xl">👑</span> 
+            Select Captain <span className="text-sm font-normal text-gray-500 ml-2">(Scores 2x Points)</span>
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {roster.map(player => (
               <button
                 key={player.id}
                 onClick={() => setCaptainId(player.id)}
-                className={`flex items-center p-3 rounded-lg border-2 transition-all ${
+                className={`relative flex items-center p-4 rounded-lg border-2 transition-all text-left ${
                   captainId === player.id 
-                    ? 'border-yellow-500 bg-yellow-50 shadow-md ring-1 ring-yellow-500' 
-                    : 'border-gray-100 hover:border-gray-300'
+                    ? 'border-yellow-500 bg-yellow-50/50 shadow-md ring-1 ring-yellow-500' 
+                    : 'border-gray-100 hover:border-gray-300 bg-white'
                 }`}
               >
                 {player.flag ? (
-                  <img src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`} className="w-6 h-4 mr-3 rounded" />
-                ) : <span className="mr-3">⛳</span>}
-                <span className={`font-bold ${captainId === player.id ? 'text-yellow-800' : 'text-gray-700'}`}>
+                  <img src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`} className="w-6 h-4 mr-3 rounded shadow-sm" />
+                ) : <span className="mr-3 text-xl">⛳</span>}
+                
+                <span className={`font-bold ${captainId === player.id ? 'text-green-900' : 'text-gray-700'}`}>
                   {player.name}
                 </span>
-                {captainId === player.id && <span className="ml-auto text-yellow-600 font-bold">2x</span>}
+
+                {captainId === player.id && (
+                  <div className="absolute top-[-10px] right-[-10px] bg-yellow-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm">
+                    CAPTAIN
+                  </div>
+                )}
               </button>
             ))}
           </div>
         </div>
 
         {/* SECTION 2: WILDCARD */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center">
-              <span className="text-2xl mr-2">🃏</span> One-Week Wildcard
-            </h2>
+        <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-gray-800">
+          <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <div className="flex items-center">
+              <span className="bg-gray-100 text-gray-700 p-2 rounded-lg mr-3 text-2xl">🃏</span> 
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">One-Week Wildcard</h2>
+                <p className="text-xs text-gray-500">Swap a player for one week only.</p>
+              </div>
+            </div>
+
+            {/* TOGGLE BUTTON */}
             <button 
               onClick={() => setWildcardActive(!wildcardActive)}
-              className={`px-4 py-1 rounded-full text-sm font-bold transition-colors ${
-                wildcardActive ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
+              className={`px-6 py-2 rounded-full font-bold transition-all shadow-sm ${
+                wildcardActive 
+                  ? 'bg-green-700 text-white ring-2 ring-green-300' 
+                  : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
               }`}
             >
-              {wildcardActive ? 'ACTIVE' : 'INACTIVE'}
+              {wildcardActive ? 'WILDCARD ACTIVE' : 'ACTIVATE WILDCARD'}
             </button>
           </div>
 
-          {wildcardActive && (
-            <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bench This Player (Out)</label>
-                <select 
-                  className="w-full p-2 border rounded text-gray-800"
-                  value={playerOut || ''}
-                  onChange={(e) => setPlayerOut(Number(e.target.value))}
-                >
-                  <option value="">Select player to remove...</option>
-                  {roster.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
+          {/* Conditional Dropdowns */}
+          {wildcardActive ? (
+            <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="grid md:grid-cols-3 gap-4 items-center">
+                
+                {/* OUT */}
+                <div>
+                  <label className="block text-xs font-bold text-red-600 uppercase mb-2 tracking-wider">Bench Player (Out)</label>
+                  <select 
+                    className="w-full p-3 border border-red-200 rounded-lg bg-white focus:ring-2 focus:ring-red-200 outline-none"
+                    value={playerOut || ''}
+                    onChange={(e) => setPlayerOut(Number(e.target.value))}
+                  >
+                    <option value="">Select player to drop...</option>
+                    {roster.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
 
-              <div className="flex justify-center text-gray-400">⬇️ SWAP FOR ⬇️</div>
+                <div className="flex justify-center">
+                   <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center border border-gray-200 shadow-sm text-gray-400">
+                     ⇄
+                   </div>
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Play This Player (In)</label>
-                <select 
-                  className="w-full p-2 border rounded text-gray-800"
-                  value={playerIn || ''}
-                  onChange={(e) => setPlayerIn(Number(e.target.value))}
-                >
-                  <option value="">Select player to add...</option>
-                  {allGolfers
-                    .filter(g => !roster.find(r => r.id === g.id)) // Hide players you already have
-                    .map(g => (
-                    <option key={g.id} value={g.id}>{g.name} (${g.cost}m)</option>
-                  ))}
-                </select>
+                {/* IN */}
+                <div>
+                  <label className="block text-xs font-bold text-green-600 uppercase mb-2 tracking-wider">Play Golfer (In)</label>
+                  <select 
+                    className="w-full p-3 border border-green-200 rounded-lg bg-white focus:ring-2 focus:ring-green-200 outline-none"
+                    value={playerIn || ''}
+                    onChange={(e) => setPlayerIn(Number(e.target.value))}
+                  >
+                    <option value="">Select player to add...</option>
+                    {allGolfers
+                      .filter(g => !roster.find(r => r.id === g.id)) 
+                      .map(g => (
+                      <option key={g.id} value={g.id}>{g.name} (${g.cost}m)</option>
+                    ))}
+                  </select>
+                </div>
+
               </div>
             </div>
+          ) : (
+             <div className="text-center py-4 text-gray-400 italic text-sm">
+               Wildcard is currently disabled. Click "Activate" to make a swap.
+             </div>
           )}
         </div>
 
@@ -186,9 +236,9 @@ export default function MyTeam() {
         <button
           onClick={saveChoices}
           disabled={saving}
-          className="w-full bg-green-800 hover:bg-green-700 text-white font-display text-xl py-4 rounded-xl shadow-lg transition-all transform hover:scale-[1.02]"
+          className="w-full bg-green-900 hover:bg-green-800 text-white font-display uppercase tracking-widest text-xl py-5 rounded-xl shadow-xl transition-all transform hover:scale-[1.01] hover:shadow-2xl disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          {saving ? 'Saving...' : '💾 Save Tactics'}
+          {saving ? 'Saving Strategy...' : 'Confirm & Save Strategy'}
         </button>
 
       </div>
