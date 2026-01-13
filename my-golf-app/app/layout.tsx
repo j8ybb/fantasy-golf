@@ -7,8 +7,8 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const oswald = Oswald({ subsets: ['latin'], variable: '--font-oswald' })
 
 export const metadata: Metadata = {
-  title: 'Fantasy Golf',
-  description: 'The Masters Theme Fantasy League',
+  title: 'Fantasy Fairways Golf',
+  description: 'The PGA Tour Fantasy League',
 }
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
               {/* Logo / Title */}
               <div className="flex-shrink-0 flex items-center">
                 <span className="font-display text-2xl text-yellow-500 tracking-wider">
-                  MASTERS<span className="text-white">FANTASY</span>
+                  FANTASY<span className="text-white">FAIRWAYS</span>
                 </span>
               </div>
 

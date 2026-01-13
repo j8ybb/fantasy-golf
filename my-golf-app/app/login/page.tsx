@@ -44,7 +44,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border">
         <h1 className="text-2xl font-bold mb-6 text-center text-green-800">
-          {isSignUp ? 'Create Account' : 'Login to Fantasy Golf'}
+          {isSignUp ? 'Create Account' : 'Login to Fantasy Fairways Golf'}
         </h1>
         
         <form onSubmit={handleAuth} className="space-y-4">

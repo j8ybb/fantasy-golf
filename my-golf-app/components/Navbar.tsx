@@ -11,14 +11,14 @@ export default function Navbar() {
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    // Check current user
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+    // 1. Check active session immediately
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUser(session?.user ?? null)
     }
-    getUser()
+    checkUser()
 
-    // Listen for login/logout changes automatically
+    // 2. Listen for login/logout events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
        setUser(session?.user ?? null)
        if (event === 'SIGNED_OUT') {
@@ -37,7 +37,7 @@ export default function Navbar() {
   return (
     <nav className="bg-green-900 text-white p-4 shadow-md sticky top-0 z-50">
       <div className="max-w-6xl mx-auto flex justify-between items-center">
-        {/* UPDATED LOGO SECTION */}
+        {/* LOGO */}
         <Link href="/" className="text-2xl font-display font-bold tracking-wider hover:text-yellow-400 transition">
           FANTASY FAIRWAYS
         </Link>
@@ -47,6 +47,9 @@ export default function Navbar() {
           <Link href="/season-summary" className="hover:text-green-200 transition">SEASON</Link>
           <Link href="/leaderboard" className="hover:text-green-200 transition">LEADERBOARD</Link>
           
+          {/* IF YOU WANT TO FORCE THE LOGOUT BUTTON TO SHOW FOR TESTING:
+              Change the line below from "{user ? (" to "{true ? (" 
+          */}
           {user ? (
             <button 
               onClick={handleLogout} 
