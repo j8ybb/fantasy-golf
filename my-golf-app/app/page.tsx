@@ -8,6 +8,7 @@ type Golfer = {
   name: string
   cost: number
   world_rank: number
+  flag: string | null // <--- Add this line
 }
 
 export default function HomePage() {
@@ -238,12 +239,16 @@ export default function HomePage() {
                 const isSelected = draftTeam.some(p => p.id === player.id)
                 return (
                   <div key={player.id} className={`flex justify-between items-center p-4 rounded-lg border transition-all duration-200 ${isSelected ? 'bg-green-50 border-green-200 opacity-50' : 'bg-white border-gray-100 hover:border-green-300 hover:shadow-md'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-500">
-                        #{player.world_rank}
-                      </div>
-                      <span className="font-bold text-lg text-gray-800">{player.name}</span>
-                    </div>
+                    {/* Inside the map function... */}
+<div className="flex items-center gap-4">
+  <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-500 shadow-sm">
+    #{player.world_rank}
+  </div>
+  <div>
+    <span className="text-xl mr-2">{player.flag || '🏳️'}</span> {/* The Flag */}
+    <span className="font-bold text-lg text-gray-800">{player.name}</span> {/* The Name */}
+  </div>
+</div>
                     <div className="flex items-center gap-4">
                       <span className="font-display text-xl text-green-700">${player.cost.toFixed(1)}m</span>
                       <button 
