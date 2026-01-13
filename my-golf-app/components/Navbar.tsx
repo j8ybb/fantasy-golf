@@ -38,7 +38,7 @@ export default function Navbar() {
     <nav className="bg-green-800 text-white p-4 shadow-md sticky top-0 z-50">
       <div className="max-w-6xl mx-auto flex justify-between items-center">
         <Link href="/" className="text-xl font-bold tracking-tighter hover:text-green-200">
-          ⛳ FANTASY GOLF
+          ⛳ RaffertyGrace Fantasy Golf
         </Link>
         
         <div className="flex items-center gap-6 font-semibold text-sm">
