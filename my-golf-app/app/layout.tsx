@@ -1,5 +1,10 @@
 import './globals.css'
-import Navbar from '@/components/Navbar' // <--- 1. Make sure this import is here
+import Navbar from '@/components/Navbar' // Ensure this path is correct based on your folder move
+import { Inter, Oswald } from 'next/font/google'
+
+// Load fonts
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const oswald = Oswald({ subsets: ['latin'], variable: '--font-oswald' })
 
 export const metadata = {
   title: 'Fantasy Golf',
@@ -13,12 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 text-gray-900">
-        
-        {/* 2. Make sure this is the ONLY thing here (No <nav> tags!) */}
+      <body className={`${inter.variable} ${oswald.variable} font-sans bg-gray-50 text-gray-900`}>
         <Navbar />
-
-        <main>{children}</main>
+        <main className="min-h-screen">{children}</main>
       </body>
     </html>
   )
