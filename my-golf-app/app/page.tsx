@@ -25,7 +25,7 @@ export default function HomePage() {
   const [draftManager, setDraftManager] = useState('')
   const [search, setSearch] = useState('')
 
-  const BUDGET = 25.0
+  const BUDGET = 30.0
   const MAX_PLAYERS = 6
   const supabase = createClient()
 

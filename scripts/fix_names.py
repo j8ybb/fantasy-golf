@@ -7,11 +7,25 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# UPDATES: Mapped to 2-letter ISO Country Codes
+# UPDATES: Mapped to specific Home Nation codes
 UPDATES = {
-    # --- Top Players ---
+    # --- The Specific Requests ---
+    "R. McIlroy": ["Rory McIlroy", "gb-nir"],      # Northern Ireland
+    "R. MacIntyre": ["Robert MacIntyre", "gb-sct"], # Scotland
+    
+    # --- English Golfers (Converted from 'gb' to 'gb-eng') ---
+    "T. Fleetwood": ["Tommy Fleetwood", "gb-eng"],
+    "M. Fitzpatrick": ["Matt Fitzpatrick", "gb-eng"],
+    "T. Hatton": ["Tyrrell Hatton", "gb-eng"],
+    "J. Rose": ["Justin Rose", "gb-eng"],
+    "A. Rai": ["Aaron Rai", "gb-eng"],
+    "M. Penge": ["Marco Penge", "gb-eng"],
+    "H. Hall": ["Harry Hall", "gb-eng"],
+    "M. Wallace": ["Matt Wallace", "gb-eng"],
+    "D. Brown": ["Daniel Brown", "gb-eng"],
+    
+    # --- Rest of the World (Same as before) ---
     "S. Scheffler": ["Scottie Scheffler", "us"],
-    "R. McIlroy": ["Rory McIlroy", "ie"], # or gb for Northern Ireland
     "X. Schauffele": ["Xander Schauffele", "us"],
     "V. Hovland": ["Viktor Hovland", "no"],
     "L. Aberg": ["Ludvig Åberg", "se"],
@@ -20,10 +34,7 @@ UPDATES = {
     "P. Cantlay": ["Patrick Cantlay", "us"],
     "M. Homa": ["Max Homa", "us"],
     "B. Harman": ["Brian Harman", "us"],
-    "T. Fleetwood": ["Tommy Fleetwood", "gb"],
-    "M. Fitzpatrick": ["Matt Fitzpatrick", "gb"],
     "J. Spieth": ["Jordan Spieth", "us"],
-    "T. Hatton": ["Tyrrell Hatton", "gb"],
     "K. Bradley": ["Keegan Bradley", "us"],
     "J. Thomas": ["Justin Thomas", "us"],
     "S. Burns": ["Sam Burns", "us"],
@@ -34,11 +45,9 @@ UPDATES = {
     "R. Henley": ["Russell Henley", "us"],
     "S. Straka": ["Sepp Straka", "at"],
     "H. Matsuyama": ["Hideki Matsuyama", "jp"],
-    "J. Rose": ["Justin Rose", "gb"],
     "S. Lowry": ["Shane Lowry", "ie"],
     "C. Conners": ["Corey Conners", "ca"],
     "M. McNealy": ["Maverick McNealy", "us"],
-    "R. MacIntyre": ["Robert MacIntyre", "gb"], # gb-sct isn't standard ISO, using gb
     "J. Spaun": ["J.J. Spaun", "us"],
     "B. Griffin": ["Ben Griffin", "us"],
     "H. English": ["Harris English", "us"],
@@ -49,12 +58,8 @@ UPDATES = {
     "T. Finau": ["Tony Finau", "us"],
     "R. Fowler": ["Rickie Fowler", "us"],
     "M. Pavon": ["Matthieu Pavon", "fr"],
-
-    # --- Extended List ---
     "A. Noren": ["Alex Norén", "se"],
-    "A. Rai": ["Aaron Rai", "gb"],
     "C. Gotterup": ["Chris Gotterup", "us"],
-    "M. Penge": ["Marco Penge", "gb"],
     "A. Novak": ["Andrew Novak", "us"],
     "M. Greyserman": ["Max Greyserman", "us"],
     "K. Kitayama": ["Kurt Kitayama", "us"],
@@ -76,7 +81,6 @@ UPDATES = {
     "S. Kim": ["Si Woo Kim", "kr"],
     "M. McCarty": ["Matt McCarty", "us"],
     "T. Detry": ["Thomas Detry", "be"],
-    "H. Hall": ["Harry Hall", "gb"],
     "D. Berger": ["Daniel Berger", "us"],
     "K. Reitan": ["Kristoffer Reitan", "no"],
     "D. McCarthy": ["Denny McCarthy", "us"],
@@ -87,8 +91,6 @@ UPDATES = {
     "B. Cauley": ["Bud Cauley", "us"],
     "C. Kirk": ["Chris Kirk", "us"],
     "R. Hoey": ["Rico Hoey", "ph"],
-    "M. Wallace": ["Matt Wallace", "gb"],
-    "D. Brown": ["Daniel Brown", "gb"],
     "A. Saddier": ["Adrien Saddier", "fr"],
     "J. Bridgeman": ["Jacob Bridgeman", "us"],
     "A. Potgieter": ["Aldrich Potgieter", "za"],
@@ -161,7 +163,7 @@ UPDATES = {
 }
 
 def fix_golfers():
-    print("🔧 Fixing Golfer Names and adding Country Codes...")
+    print("🔧 Fixing Home Nation Flags...")
     
     response = supabase.table('golfers').select('*').execute()
     golfers = response.data
@@ -170,20 +172,18 @@ def fix_golfers():
     for golfer in golfers:
         current_name = golfer['name']
         
-        # We check both the old short name AND the new full name
-        # to ensure we catch everyone.
+        # Check matching names
         found = False
         target_code = ""
         target_name = ""
 
-        # Check in keys (S. Scheffler)
+        # Check precise matches first
         if current_name in UPDATES:
             target_name = UPDATES[current_name][0]
             target_code = UPDATES[current_name][1]
             found = True
-        
-        # Check if already updated (Scottie Scheffler)
         else:
+            # Check if name is already full name (e.g. "Tommy Fleetwood")
             for key, val in UPDATES.items():
                 if val[0] == current_name:
                     target_name = val[0]
@@ -192,12 +192,13 @@ def fix_golfers():
                     break
         
         if found:
-            print(f"   ✨ Updating: {current_name} -> {target_code.upper()} {target_name}")
-            supabase.table('golfers').update({
-                'name': target_name,
-                'flag': target_code
-            }).eq('id', golfer['id']).execute()
-            count += 1
+            # Only update if the flag is actually different
+            if golfer.get('flag') != target_code:
+                print(f"   ✨ Updating {target_name}: {golfer.get('flag')} -> {target_code}")
+                supabase.table('golfers').update({
+                    'flag': target_code
+                }).eq('id', golfer['id']).execute()
+                count += 1
 
     print(f"✅ Finished! Updated {count} golfers.")
 
