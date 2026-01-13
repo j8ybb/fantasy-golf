@@ -1,5 +1,5 @@
 import './globals.css'
-import Navbar from '@/components/Navbar' // <--- Importing the new component
+import Navbar from '@/components/Navbar' // <--- 1. Make sure this import is here
 
 export const metadata = {
   title: 'Fantasy Golf',
@@ -15,7 +15,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-gray-50 text-gray-900">
         
-        {/* We just place the component here! */}
+        {/* 2. Make sure this is the ONLY thing here (No <nav> tags!) */}
         <Navbar />
 
         <main>{children}</main>
