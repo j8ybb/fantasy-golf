@@ -34,10 +34,18 @@ export default function MyTeam() {
   const supabase = createClient()
   const router = useRouter()
 
+  // --- HELPER: FORCE 10AM UTC DEADLINE ---
+  const getDeadline = (dateStr: string) => {
+    const datePart = dateStr.split('T')[0]
+    return new Date(`${datePart}T10:00:00Z`).getTime()
+  }
+
   const calculateTimeLeft = useCallback(() => {
     if (!activeTournament) return null
     const now = new Date().getTime()
-    const target = new Date(activeTournament.start_date).getTime()
+    // Updated to use the consistent 10am Deadline
+    const target = getDeadline(activeTournament.start_date)
+    
     const difference = target - now
     if (difference <= 0) {
       setIsLocked(true)
@@ -66,7 +74,10 @@ export default function MyTeam() {
 
       if (tourneyData) {
         setActiveTournament(tourneyData)
-        if (new Date() >= new Date(tourneyData.start_date)) setIsLocked(true)
+        // Check lock status immediately
+        const now = new Date().getTime()
+        const deadline = getDeadline(tourneyData.start_date)
+        if (now >= deadline) setIsLocked(true)
       }
 
       const { data: teamData } = await supabase
@@ -185,38 +196,63 @@ export default function MyTeam() {
             <h1 className="text-3xl md:text-4xl font-display uppercase tracking-widest text-yellow-500">
               {activeTournament?.name || "No Active Tournament"}
             </h1>
-            {isLocked ? (
-              <div className="mt-4 inline-block bg-red-600 px-6 py-2 rounded-full text-sm font-black uppercase tracking-tighter shadow-lg">
-                🔒 Selection Locked
-              </div>
-            ) : timeLeft && (
-              <div className="mt-4 flex flex-col items-center text-green-400">
-                <span className="text-[10px] font-black uppercase tracking-widest mb-2">Deadline in</span>
-                <div className="flex gap-4 text-center text-white">
-                   <div className="flex flex-col"><span className="text-3xl font-display font-bold leading-none">{timeLeft.days}</span><span className="text-[8px] uppercase opacity-60">Days</span></div>
-                   <span className="text-3xl font-display opacity-30">:</span>
-                   <div className="flex flex-col"><span className="text-3xl font-display font-bold leading-none">{timeLeft.hours}</span><span className="text-[8px] uppercase opacity-60">Hrs</span></div>
-                   <span className="text-3xl font-display opacity-30">:</span>
-                   <div className="flex flex-col"><span className="text-3xl font-display font-bold leading-none">{timeLeft.minutes}</span><span className="text-[8px] uppercase opacity-60">Mins</span></div>
-                </div>
-              </div>
-            )}
           </div>
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none select-none text-[120px] font-black leading-none -rotate-12 translate-y-10 whitespace-nowrap uppercase">
             PGA TOUR
           </div>
         </div>
 
+        {/* --- STATUS / TIMER CARD --- */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 flex flex-col items-center justify-center text-center">
+             <p className="text-[10px] font-black uppercase text-green-600 tracking-[0.2em] mb-2">Tournament Status</p>
+             
+             {isLocked ? (
+                 <div className="flex items-center gap-2 bg-red-50 border border-red-100 px-5 py-2 rounded-full animate-pulse">
+                   <span className="relative flex h-3 w-3">
+                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                     <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                   </span>
+                   <span className="text-sm font-bold text-red-600 uppercase tracking-widest">Locked • Live</span>
+                 </div>
+             ) : timeLeft ? (
+                 <div className="flex gap-4 items-center justify-center bg-gray-50 px-6 py-3 rounded-xl border border-gray-100">
+                     <div className="text-center">
+                         <span className="block text-2xl font-bold text-gray-800 leading-none">{timeLeft.days}</span>
+                         <span className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">Days</span>
+                     </div>
+                     <span className="text-gray-300 font-light text-2xl">:</span>
+                     <div className="text-center">
+                         <span className="block text-2xl font-bold text-gray-800 leading-none">{timeLeft.hours}</span>
+                         <span className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">Hours</span>
+                     </div>
+                     <span className="text-gray-300 font-light text-2xl">:</span>
+                     <div className="text-center">
+                         <span className="block text-2xl font-bold text-gray-800 leading-none">{timeLeft.minutes}</span>
+                         <span className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">Mins</span>
+                     </div>
+                     <span className="text-gray-300 font-light text-2xl">:</span>
+                     <div className="text-center">
+                         <span className="block text-2xl font-bold text-gray-800 leading-none">{timeLeft.seconds}</span>
+                         <span className="text-[9px] uppercase font-bold text-gray-400 tracking-wider">Secs</span>
+                     </div>
+                 </div>
+             ) : (
+                 <span className="text-xs uppercase font-bold text-gray-400">Loading Timer...</span>
+             )}
+        </div>
+
         {/* CAPTAIN SELECTION */}
-        <div className={`bg-white p-6 rounded-xl shadow-lg border-t-4 border-yellow-500 ${isLocked ? 'opacity-70 pointer-events-none' : ''}`}>
+        <div className={`bg-white p-6 rounded-xl shadow-lg border-t-4 border-yellow-500 transition-opacity ${isLocked ? 'opacity-70 pointer-events-none grayscale-[0.5]' : ''}`}>
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center justify-between">
             <span className="flex items-center"><span className="bg-yellow-100 text-yellow-700 p-2 rounded-lg mr-3 text-2xl">👑</span> Select Captain</span>
+            {isLocked && <span className="text-xs font-bold text-red-500 uppercase bg-red-50 px-2 py-1 rounded">Locked</span>}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {roster.map(player => (
               <button
                 key={player.id}
                 onClick={() => setCaptainId(player.id)}
+                disabled={isLocked}
                 className={`relative flex items-center p-4 rounded-lg border-2 transition-all text-left ${captainId === player.id ? 'border-yellow-500 bg-yellow-50 shadow-md' : 'border-gray-100 hover:border-gray-300'}`}
               >
                 <div className="flex flex-col">
@@ -230,10 +266,14 @@ export default function MyTeam() {
         </div>
 
         {/* WILDCARD MANAGEMENT */}
-        <div className={`bg-white p-6 rounded-xl shadow-lg border-t-4 border-gray-800 ${isLocked ? 'opacity-70 pointer-events-none' : ''}`}>
+        <div className={`bg-white p-6 rounded-xl shadow-lg border-t-4 border-gray-800 transition-opacity ${isLocked ? 'opacity-70 pointer-events-none grayscale-[0.5]' : ''}`}>
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center"><span className="bg-gray-100 p-2 rounded-lg mr-3 text-2xl">🃏</span><h2 className="text-xl font-bold text-gray-800">Weekly Wildcard</h2></div>
-            <button onClick={() => setWildcardActive(!wildcardActive)} className={`px-6 py-2 rounded-full font-black text-[10px] tracking-widest uppercase transition-all ${wildcardActive ? 'bg-green-700 text-white shadow-lg' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
+            <button 
+                onClick={() => setWildcardActive(!wildcardActive)} 
+                disabled={isLocked}
+                className={`px-6 py-2 rounded-full font-black text-[10px] tracking-widest uppercase transition-all ${wildcardActive ? 'bg-green-700 text-white shadow-lg' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+            >
               {wildcardActive ? 'Active' : 'Activate'}
             </button>
           </div>
@@ -246,12 +286,10 @@ export default function MyTeam() {
               <div className="grid md:grid-cols-2 gap-4">
                 <select className="w-full p-3 border rounded-lg bg-white outline-none" value={playerOut || ''} onChange={(e) => setPlayerOut(Number(e.target.value))}>
                   <option value="">Bench Player (Out)...</option>
-                  {/* Restored Cost Values Below */}
                   {roster.map(p => <option key={p.id} value={p.id}>{p.name} (${p.cost?.toFixed(1)}m)</option>)}
                 </select>
                 <select className="w-full p-3 border rounded-lg bg-white outline-none" value={playerIn || ''} onChange={(e) => setPlayerIn(Number(e.target.value))}>
                   <option value="">Draft Player (In)...</option>
-                  {/* Restored Cost Values Below */}
                   {allGolfers.filter(g => !roster.find(r => r.id === g.id)).map(g => <option key={g.id} value={g.id}>{g.name} (${g.cost?.toFixed(1)}m)</option>)}
                 </select>
               </div>
@@ -278,9 +316,9 @@ export default function MyTeam() {
                 <tbody className="divide-y divide-gray-50">
                    {history.map((row, idx) => (
                       <tr key={idx} className="hover:bg-green-50/50 transition">
-                         <td className="px-8 py-5 font-bold text-gray-700">{row.tournament?.name}</td>
-                         <td className="px-8 py-5 text-sm text-gray-500">👑 {row.choices?.captain?.name}</td>
-                         <td className="px-8 py-5 text-right font-display text-2xl text-green-700 font-light">{row.points}</td>
+                          <td className="px-8 py-5 font-bold text-gray-700">{row.tournament?.name}</td>
+                          <td className="px-8 py-5 text-sm text-gray-500">👑 {row.choices?.captain?.name}</td>
+                          <td className="px-8 py-5 text-right font-display text-2xl text-green-700 font-light">{row.points}</td>
                       </tr>
                    ))}
                    {history.length === 0 && (<tr><td className="p-10 text-center italic text-gray-400">No results recorded yet.</td></tr>)}
@@ -308,4 +346,4 @@ export default function MyTeam() {
       </div>
     </div>
   )
-} 
+}

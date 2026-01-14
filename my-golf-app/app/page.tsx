@@ -62,6 +62,7 @@ export default function HomePage() {
   // Team Data
   const [existingTeam, setExistingTeam] = useState<Golfer[] | null>(null)
   const [myTeamName, setMyTeamName] = useState('')
+  const [captainId, setCaptainId] = useState<number | null>(null) // State for Captain
   
   // Dashboard Stats
   const [seasonPoints, setSeasonPoints] = useState(0)
@@ -71,6 +72,9 @@ export default function HomePage() {
   const [activeTournament, setActiveTournament] = useState<any>(null)
   const [timeLeft, setTimeLeft] = useState<{days: number, hours: number, minutes: number} | null>(null)
   const [isLive, setIsLive] = useState(false)
+  
+  // Placeholder for current week
+  const currentWeek = 1; 
 
   // Draft Data
   const [golfers, setGolfers] = useState<Golfer[]>([])
@@ -85,7 +89,6 @@ export default function HomePage() {
 
   // --- HELPER: FORCE 10AM UTC DEADLINE ---
   const getDeadline = (dateStr: string) => {
-    // Takes "2026-01-15" and returns timestamp for "2026-01-15T10:00:00Z"
     const datePart = dateStr.split('T')[0]
     return new Date(`${datePart}T10:00:00Z`).getTime()
   }
@@ -95,7 +98,6 @@ export default function HomePage() {
     if (!activeTournament || isLive) return null
     
     const now = new Date().getTime()
-    // UPDATED: Use getDeadline instead of raw start_date
     const target = getDeadline(activeTournament.start_date)
     
     const difference = target - now
@@ -117,7 +119,9 @@ export default function HomePage() {
   // --- MAIN DATA FETCH ---
   useEffect(() => {
     const init = async () => {
-      // 1. Fetch Tournament & Golfers
+      let currentTourneyId = null;
+
+      // 1. Fetch Tournament
       const { data: tourneyData } = await supabase
         .from('tournaments')
         .select('*')
@@ -128,9 +132,9 @@ export default function HomePage() {
 
       if (tourneyData) {
         setActiveTournament(tourneyData)
+        currentTourneyId = tourneyData.id;
+
         const now = new Date().getTime()
-        
-        // UPDATED: Live check now uses 10am UTC deadline
         const start = getDeadline(tourneyData.start_date)
         
         if (now >= start && tourneyData.status !== 'COMPLETED') {
@@ -177,6 +181,7 @@ export default function HomePage() {
         
         if (standings) setSeasonPoints(standings.total_season_points)
 
+        // --- FETCH ROSTER (Safe) ---
         const { data: roster } = await supabase
             .from('season_rosters')
             .select(`
@@ -195,6 +200,20 @@ export default function HomePage() {
                 roster.player_1, roster.player_2, roster.player_3,
                 roster.player_4, roster.player_5, roster.player_6
             ] as any)
+        }
+
+        // --- FETCH CAPTAIN (From weekly_choices) ---
+        if (currentTourneyId) {
+            const { data: choices } = await supabase
+                .from('weekly_choices')
+                .select('captain_id')
+                .eq('user_id', currentUser.id)
+                .eq('tournament_id', currentTourneyId)
+                .maybeSingle()
+            
+            if (choices) {
+                setCaptainId(choices.captain_id)
+            }
         }
       }
       
@@ -223,7 +242,7 @@ export default function HomePage() {
   }
 
   const submitTeam = async () => {
-    if (isLive) return alert('Drafting is closed for this week! Submissions closed at 10am UTC.') // Extra safety check
+    if (isLive) return alert('Drafting is closed for this week! Submissions closed at 10am UTC.') 
 
     if (!user) {
         localStorage.setItem('pendingDraft', JSON.stringify(draftTeam))
@@ -418,22 +437,48 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-6 mt-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-display text-green-800 uppercase tracking-wide">Starting Lineup</h2>
-            <span className="bg-green-100 text-green-800 text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest">6 Players Active</span>
+            
+            <Link 
+              href="/team" 
+              className="bg-[#F0B100] hover:bg-[#d69e00] text-white text-xs font-black py-2 px-4 rounded shadow-md transition-all hover:shadow-lg uppercase tracking-widest"
+            >
+              Choose Week {currentWeek ?? 1} Team
+            </Link>
+            
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {existingTeam.map((player) => (
-              <div key={player.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all group">
-                <div className="bg-gray-50 p-4 border-b border-gray-100 flex justify-between items-center group-hover:bg-green-50">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Rank #{player.world_rank}</span>
-                  <span className="font-display text-xl text-green-700">${player.cost?.toFixed(1)}m</span>
+            {existingTeam.map((player) => {
+              const isCaptain = player.id === captainId;
+              
+              return (
+                <div 
+                  key={player.id} 
+                  className={`bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-lg transition-all group ${isCaptain ? 'border-yellow-400 ring-1 ring-yellow-400' : 'border-gray-200'}`}
+                >
+                  <div className={`p-4 border-b flex justify-between items-center ${isCaptain ? 'bg-yellow-50' : 'bg-gray-50 group-hover:bg-green-50'}`}>
+                    <div className="flex items-center gap-2">
+                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Rank #{player.world_rank}</span>
+                    </div>
+                    <span className="font-display text-xl text-green-700">${player.cost?.toFixed(1)}m</span>
+                  </div>
+                  <div className="p-6 flex items-center gap-3 relative">
+                    {player.flag && <img src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`} width="20" height="15" alt="flag" className="rounded shadow-sm opacity-80" />}
+                    
+                    <h3 className="text-xl font-bold text-gray-800">
+                        {player.name}
+                    </h3>
+                    
+                    {/* CAPTAIN BADGE */}
+                    {isCaptain && (
+                        <span className="ml-auto bg-yellow-500 text-white text-[10px] font-black uppercase tracking-wider py-1 px-2 rounded shadow-sm">
+                            Captain
+                        </span>
+                    )}
+                  </div>
                 </div>
-                <div className="p-6 flex items-center gap-3">
-                  {player.flag && <img src={`https://flagcdn.com/24x18/${player.flag.toLowerCase()}.png`} width="20" height="15" alt="flag" className="rounded shadow-sm opacity-80" />}
-                  <h3 className="text-xl font-bold text-gray-800">{player.name}</h3>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
           
           <div className={`mt-12 rounded-2xl p-10 text-center border-2 transition-all ${isTransferWindowOpen() ? 'bg-green-50 border-green-200 shadow-xl' : 'bg-white border-gray-100'}`}>
