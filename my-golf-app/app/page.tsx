@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 type Golfer = {
   id: number
@@ -15,12 +16,13 @@ type Golfer = {
 export default function HomePage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false) // New state for button loading
   
   // Team Data
   const [existingTeam, setExistingTeam] = useState<Golfer[] | null>(null)
   const [myTeamName, setMyTeamName] = useState('')
   
-  // Dashboard Stats State (Linked to Live Database View)
+  // Dashboard Stats State
   const [seasonPoints, setSeasonPoints] = useState(0)
   const [seasonRank, setSeasonRank] = useState(0)
   const [rankTrend, setRankTrend] = useState<'up' | 'down' | 'neutral'>('neutral') 
@@ -40,6 +42,7 @@ export default function HomePage() {
   const BUDGET = 30.0
   const MAX_PLAYERS = 6
   const supabase = createClient()
+  const router = useRouter()
 
   // --- LOGIC: TOURNAMENT STATUS & TIMER ---
   const calculateStatus = useCallback((tournament: any) => {
@@ -47,7 +50,6 @@ export default function HomePage() {
     const now = new Date().getTime()
     const start = new Date(tournament.start_date).getTime()
     
-    // If current time is past start date and status is not COMPLETED, it is LIVE
     if (now >= start && tournament.status !== 'COMPLETED') {
       setIsLive(true)
       setTimeLeft(null)
@@ -76,17 +78,30 @@ export default function HomePage() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
+      // RESTORE DRAFT: If they just logged in, check for a saved team
+      const savedDraft = localStorage.getItem('pendingDraft')
+      if (savedDraft) {
+        setDraftTeam(JSON.parse(savedDraft))
+        localStorage.removeItem('pendingDraft')
+        // We keep it in storage until successful submission just in case
+      }
+
       if (user) {
         // 1. Get Profile (Team Name)
         const { data: profile } = await supabase
           .from('profiles')
-          .select('team_name')
+          .select('team_name, manager_name')
           .eq('id', user.id)
           .single()
         
-        if (profile) setMyTeamName(profile.team_name)
+        if (profile) {
+            setMyTeamName(profile.team_name)
+            // Pre-fill draft inputs if they are editing
+            setDraftName(profile.team_name || '')
+            setDraftManager(profile.manager_name || '')
+        }
 
-        // 2. Get Live Stats from Season Leaderboard View
+        // 2. Get Live Stats
         const { data: standings } = await supabase
           .from('season_leaderboard')
           .select('total_season_points')
@@ -95,8 +110,6 @@ export default function HomePage() {
 
         if (standings) {
             setSeasonPoints(standings.total_season_points)
-            setSeasonRank(0) // Logic for rank calculation from view can be added here
-            setRankTrend('neutral')
         }
 
         // 3. Get Roster
@@ -111,7 +124,7 @@ export default function HomePage() {
             player_6:golfers!season_rosters_player_6_id_fkey(*)
           `)
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle() // changed from single() to avoid errors if no roster yet
 
         if (roster) {
           setExistingTeam([
@@ -174,24 +187,60 @@ export default function HomePage() {
     setDraftTeam(draftTeam.filter((p) => p.id !== playerId))
   }
 
+  // --- FIXED SUBMIT FUNCTION ---
   const submitTeam = async () => {
-    if (!user) return (window.location.href = '/login')
-    if (!draftName.trim() || !draftManager.trim()) return alert('Please enter both Team and Manager names!')
-
-    await supabase.from('profiles').update({ team_name: draftName, manager_name: draftManager }).eq('id', user.id)
-
-    const payload = {
-      user_id: user.id,
-      player_1_id: draftTeam[0].id, player_2_id: draftTeam[1].id, player_3_id: draftTeam[2].id,
-      player_4_id: draftTeam[3].id, player_5_id: draftTeam[4].id, player_6_id: draftTeam[5].id,
+    // 1. Handle Logged Out Users
+    if (!user) {
+        // Save draft to storage so it survives the login redirect
+        localStorage.setItem('pendingDraft', JSON.stringify(draftTeam))
+        return router.push('/login')
     }
 
-    const { error } = await supabase.from('season_rosters').upsert(payload)
-    if (!error) window.location.reload()
+    // 2. Validation
+    if (!draftName.trim() || !draftManager.trim()) {
+        return alert('Please enter both Team and Manager names!')
+    }
+
+    setIsSubmitting(true)
+
+    try {
+        // 3. Update Profile
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .update({ team_name: draftName, manager_name: draftManager })
+            .eq('id', user.id)
+
+        if (profileError) throw profileError
+
+        // 4. Save Roster
+        const payload = {
+            user_id: user.id,
+            player_1_id: draftTeam[0].id, 
+            player_2_id: draftTeam[1].id, 
+            player_3_id: draftTeam[2].id,
+            player_4_id: draftTeam[3].id, 
+            player_5_id: draftTeam[4].id, 
+            player_6_id: draftTeam[5].id,
+        }
+
+        const { error: rosterError } = await supabase
+            .from('season_rosters')
+            .upsert(payload)
+
+        if (rosterError) throw rosterError
+
+        // 5. Success - Clear saved draft and reload
+        localStorage.removeItem('pendingDraft')
+        window.location.reload()
+
+    } catch (error: any) {
+        console.error("Submission Error:", error)
+        alert(`Failed to save team: ${error.message || error.details}`)
+        setIsSubmitting(false)
+    }
   }
 
   const currentSpend = draftTeam.reduce((sum, p) => sum + p.cost, 0)
-  const remainingBudget = (BUDGET - currentSpend).toFixed(1)
   const filteredGolfers = golfers.filter(g => g.name.toLowerCase().includes(search.toLowerCase()))
 
   if (loading) return (
@@ -200,7 +249,7 @@ export default function HomePage() {
     </div>
   )
 
-  // --- VIEW 1: DASHBOARD ---
+  // --- VIEW 1: DASHBOARD (If team exists) ---
   if (existingTeam) {
     return (
       <div className="min-h-screen pb-12 bg-gray-50 font-sans">
@@ -221,42 +270,42 @@ export default function HomePage() {
                  </div>
                </div>
 
-               {/* Stats Grid: Matched heights using items-stretch */}
+               {/* Stats Grid */}
                <div className="w-full lg:w-auto flex flex-wrap md:flex-nowrap gap-4 items-stretch">
-                  
-                  {/* Tournament Status Box */}
-                  {activeTournament && (
-                    <div className="bg-black/30 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[240px] text-center flex-1">
-                      <p className="text-[10px] font-black uppercase text-green-400 tracking-[0.2em] mb-1">Tournament Status</p>
-                      <div className="flex items-center justify-center gap-4 mt-1">
-                        <p className="font-display text-base text-white truncate max-w-[120px]">{activeTournament.name}</p>
-                        <div className="h-6 w-px bg-white/20"></div>
-                        {isLive ? (
-                          <div className="flex items-center gap-2">
-                            <span className="relative flex h-3 w-3">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                            </span>
-                            <span className="text-xl font-display font-bold tracking-tighter text-red-500">LIVE</span>
-                          </div>
-                        ) : timeLeft ? (
-                          <div className="flex gap-2 text-center">
-                            <div><span className="text-xl font-bold">{timeLeft.days}</span><span className="text-[8px] uppercase opacity-60 ml-0.5">d</span></div>
-                            <div><span className="text-xl font-bold">{timeLeft.hours}</span><span className="text-[8px] uppercase opacity-60 ml-0.5">h</span></div>
-                          </div>
-                        ) : <span className="text-[10px] uppercase font-black opacity-40">Wait</span>}
-                      </div>
-                    </div>
-                  )}
+                 
+                 {/* Tournament Status Box */}
+                 {activeTournament && (
+                   <div className="bg-black/30 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[240px] text-center flex-1">
+                     <p className="text-[10px] font-black uppercase text-green-400 tracking-[0.2em] mb-1">Tournament Status</p>
+                     <div className="flex items-center justify-center gap-4 mt-1">
+                       <p className="font-display text-base text-white truncate max-w-[120px]">{activeTournament.name}</p>
+                       <div className="h-6 w-px bg-white/20"></div>
+                       {isLive ? (
+                         <div className="flex items-center gap-2">
+                           <span className="relative flex h-3 w-3">
+                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                             <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                           </span>
+                           <span className="text-xl font-display font-bold tracking-tighter text-red-500">LIVE</span>
+                         </div>
+                       ) : timeLeft ? (
+                         <div className="flex gap-2 text-center">
+                           <div><span className="text-xl font-bold">{timeLeft.days}</span><span className="text-[8px] uppercase opacity-60 ml-0.5">d</span></div>
+                           <div><span className="text-xl font-bold">{timeLeft.hours}</span><span className="text-[8px] uppercase opacity-60 ml-0.5">h</span></div>
+                         </div>
+                       ) : <span className="text-[10px] uppercase font-black opacity-40">Wait</span>}
+                     </div>
+                   </div>
+                 )}
 
-                  {/* Points Box */}
-                  <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
-                    <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Total Points</div>
-                    <div className="text-3xl font-display text-white mt-1">{seasonPoints.toLocaleString()}</div>
-                  </div>
+                 {/* Points Box */}
+                 <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
+                   <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Total Points</div>
+                   <div className="text-3xl font-display text-white mt-1">{seasonPoints.toLocaleString()}</div>
+                 </div>
 
-                  {/* Rank Box with Trend Indicator */}
-                  <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
+                 {/* Rank Box */}
+                 <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
                      <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Rank</div>
                      <div className="flex items-center justify-center text-3xl font-display text-yellow-400 mt-1 gap-1">
                         {seasonRank > 0 ? (
@@ -269,15 +318,15 @@ export default function HomePage() {
                           <span className="text-xl opacity-40 uppercase font-black tracking-tighter">N/A</span>
                         )}
                      </div>
-                  </div>
+                 </div>
 
-                  {/* Value Box */}
-                  <div className="bg-green-800/50 backdrop-blur-md border border-white/5 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
-                    <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Team Value</div>
-                    <div className="text-3xl font-display text-white mt-1">
-                      ${existingTeam.reduce((acc, p) => acc + (p.cost || 0), 0).toFixed(1)}m
-                    </div>
-                  </div>
+                 {/* Value Box */}
+                 <div className="bg-green-800/50 backdrop-blur-md border border-white/5 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
+                   <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Team Value</div>
+                   <div className="text-3xl font-display text-white mt-1">
+                     ${existingTeam.reduce((acc, p) => acc + (p.cost || 0), 0).toFixed(1)}m
+                   </div>
+                 </div>
                </div>
             </div>
           </div>
@@ -323,7 +372,7 @@ export default function HomePage() {
     )
   }
 
-  // --- VIEW 2: DRAFT BOARD ---
+  // --- VIEW 2: DRAFT BOARD (If no team exists) ---
   return (
     <div className="min-h-screen pb-12 font-sans bg-gray-50">
       <div className="bg-green-900 text-white py-12 px-6 shadow-lg border-b-4 border-yellow-500 mb-8">
@@ -333,6 +382,8 @@ export default function HomePage() {
           </div>
       </div>
       <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Left Column: Input and List */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
             <h2 className="font-display text-2xl text-green-800 mb-4 uppercase tracking-wide">Team Details</h2>
@@ -346,7 +397,7 @@ export default function HomePage() {
               <input type="text" placeholder="🔍 Search Golfers..." className="w-full p-3 border border-gray-200 rounded-xl shadow-inner focus:ring-2 focus:ring-green-500 outline-none transition" onChange={(e) => setSearch(e.target.value)} />
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {golfers.filter(g => g.name.toLowerCase().includes(search.toLowerCase())).map((p) => {
+              {filteredGolfers.map((p) => {
                 const isSelected = draftTeam.some(dt => dt.id === p.id)
                 return (
                   <div key={p.id} className={`flex justify-between items-center p-4 rounded-xl border transition-all ${isSelected ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white border-gray-50 hover:border-green-300'}`}>
@@ -367,6 +418,8 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+
+        {/* Right Column: Squad Sidebar */}
         <div className="lg:col-span-1">
           <div className="bg-white p-8 rounded-2xl shadow-2xl border border-green-50 sticky top-24">
             <h2 className="font-display text-2xl text-gray-800 mb-6 border-b pb-4 uppercase tracking-widest">Your Squad</h2>
@@ -389,7 +442,15 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            <button onClick={submitTeam} disabled={draftTeam.length !== 6 || draftTeam.reduce((s, p) => s + p.cost, 0) > BUDGET} className="w-full mt-8 bg-green-700 text-white py-5 rounded-xl font-display text-xl uppercase tracking-widest hover:bg-green-800 disabled:opacity-30 transition shadow-xl transform hover:-translate-y-1">Confirm Team</button>
+            
+            {/* UPDATED SUBMIT BUTTON */}
+            <button 
+                onClick={submitTeam} 
+                disabled={draftTeam.length !== 6 || draftTeam.reduce((s, p) => s + p.cost, 0) > BUDGET || isSubmitting} 
+                className="w-full mt-8 bg-green-700 text-white py-5 rounded-xl font-display text-xl uppercase tracking-widest hover:bg-green-800 disabled:opacity-30 transition shadow-xl transform hover:-translate-y-1"
+            >
+                {isSubmitting ? 'Confirming...' : 'Confirm Team'}
+            </button>
           </div>
         </div>
       </div>
