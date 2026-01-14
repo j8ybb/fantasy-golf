@@ -98,6 +98,26 @@ export default function RulesPage() {
           </div>
         </div>
 
+        {/* --- NEW SECTION: SCORING RULES DESCRIPTION --- */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+            <h3 className="font-display text-xl text-green-900 mb-6 uppercase tracking-widest border-b border-gray-100 pb-4">
+              How Scoring Works
+            </h3>
+            <div className="space-y-4 text-gray-600 leading-relaxed">
+                <p>
+                  Each player will receive points in relation to their final position after Sunday play concludes. They will receive the correlating points based on the table below.
+                </p>
+                <p>
+                  <span className="font-bold text-green-800">Tie Breaker Rule:</span> If a player is tied for a position (e.g., T2), they will receive the <strong>full points</strong> for that position (e.g., 75 points), rather than a split share.
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mt-4">
+                  <p className="text-sm text-yellow-800">
+                    <strong>🏆 Major Championship Bonus:</strong> For all 4 Majors and the Tour Final, all players will receive a <strong>50% point bonus</strong>. Note: A Captain's 2x multiplier will compound with this bonus!
+                  </p>
+                </div>
+            </div>
+        </div>
+
         {/* SECTION 5: SCORING TABLE */}
         <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
           <div className="bg-gray-50 px-8 py-6 border-b border-gray-200 flex justify-between items-center">
