@@ -44,9 +44,9 @@ const getCountryName = (code: string | null) => {
     'cn': 'China',
     'tw': 'Taiwan',
     'th': 'Thailand',
-    'co': 'Colombia',    // Added
-    've': 'Venezuela',   // Added
-    'ph': 'Philippines'  // Added
+    'co': 'Colombia',
+    've': 'Venezuela',
+    'ph': 'Philippines'
   }
   return map[code.toLowerCase()] || code.toUpperCase()
 }
@@ -83,11 +83,21 @@ export default function HomePage() {
   const BUDGET = 30.0
   const MAX_PLAYERS = 6
 
+  // --- HELPER: FORCE 10AM UTC DEADLINE ---
+  const getDeadline = (dateStr: string) => {
+    // Takes "2026-01-15" and returns timestamp for "2026-01-15T10:00:00Z"
+    const datePart = dateStr.split('T')[0]
+    return new Date(`${datePart}T10:00:00Z`).getTime()
+  }
+
   // --- TIMER LOGIC ---
   const calculateTimeLeft = useCallback(() => {
     if (!activeTournament || isLive) return null
+    
     const now = new Date().getTime()
-    const target = new Date(activeTournament.start_date).getTime()
+    // UPDATED: Use getDeadline instead of raw start_date
+    const target = getDeadline(activeTournament.start_date)
+    
     const difference = target - now
     if (difference <= 0) return null
     return {
@@ -119,17 +129,22 @@ export default function HomePage() {
       if (tourneyData) {
         setActiveTournament(tourneyData)
         const now = new Date().getTime()
-        const start = new Date(tourneyData.start_date).getTime()
-        if (now >= start && tourneyData.status !== 'COMPLETED') setIsLive(true)
+        
+        // UPDATED: Live check now uses 10am UTC deadline
+        const start = getDeadline(tourneyData.start_date)
+        
+        if (now >= start && tourneyData.status !== 'COMPLETED') {
+            setIsLive(true)
+        }
       }
 
-      // UPDATED QUERY: Sort by Cost (Desc), THEN by World Rank (Asc)
+      // Sort by Cost (Desc), THEN by World Rank (Asc)
       const { data: allGolfers } = await supabase
         .from('golfers')
         .select('*')
         .eq('active', true)
         .order('cost', { ascending: false })
-        .order('world_rank', { ascending: true }) // Secondary Sort: Lower rank # is better
+        .order('world_rank', { ascending: true })
 
       if (allGolfers) setGolfers(allGolfers)
 
@@ -208,6 +223,8 @@ export default function HomePage() {
   }
 
   const submitTeam = async () => {
+    if (isLive) return alert('Drafting is closed for this week! Submissions closed at 10am UTC.') // Extra safety check
+
     if (!user) {
         localStorage.setItem('pendingDraft', JSON.stringify(draftTeam))
         return router.push('/login')
@@ -473,7 +490,7 @@ export default function HomePage() {
               >
                 <option value="All">All Nations</option>
                 {uniqueNations.map(flag => (
-                    <option key={flag} value={flag}>{getCountryName(flag)}</option>
+                    <option key={flag} value={flag ?? ""}>{getCountryName(flag)}</option>
                 ))}
               </select>
             </div>
