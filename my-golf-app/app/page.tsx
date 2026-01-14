@@ -13,8 +13,45 @@ type Golfer = {
   flag: string | null
 }
 
+// Helper to map codes to nice names
+const getCountryName = (code: string | null) => {
+  if (!code) return 'Other'
+  const map: Record<string, string> = {
+    'us': 'United States',
+    'gb-eng': 'England',
+    'gb-sct': 'Scotland',
+    'gb-nir': 'Northern Ireland',
+    'gb-wls': 'Wales',
+    'ie': 'Ireland',
+    'es': 'Spain',
+    'au': 'Australia',
+    'za': 'South Africa',
+    'kr': 'South Korea',
+    'jp': 'Japan',
+    'se': 'Sweden',
+    'ca': 'Canada',
+    'de': 'Germany',
+    'it': 'Italy',
+    'fr': 'France',
+    'dk': 'Denmark',
+    'no': 'Norway',
+    'be': 'Belgium',
+    'at': 'Austria',
+    'nz': 'New Zealand',
+    'cl': 'Chile',
+    'ar': 'Argentina',
+    'fi': 'Finland',
+    'cn': 'China',
+    'tw': 'Taiwan',
+    'th': 'Thailand',
+    'co': 'Colombia',    // Added
+    've': 'Venezuela',   // Added
+    'ph': 'Philippines'  // Added
+  }
+  return map[code.toLowerCase()] || code.toUpperCase()
+}
+
 export default function HomePage() {
-  // Create the client once
   const supabase = createClient()
   const router = useRouter()
 
@@ -41,6 +78,7 @@ export default function HomePage() {
   const [draftName, setDraftName] = useState('')
   const [draftManager, setDraftManager] = useState('')
   const [search, setSearch] = useState('')
+  const [filterNation, setFilterNation] = useState('All')
 
   const BUDGET = 30.0
   const MAX_PLAYERS = 6
@@ -66,10 +104,10 @@ export default function HomePage() {
     return () => clearInterval(timer)
   }, [activeTournament, isLive, calculateTimeLeft])
 
-  // --- MAIN DATA FETCH (RUNS ONCE) ---
+  // --- MAIN DATA FETCH ---
   useEffect(() => {
     const init = async () => {
-      // 1. Fetch Tournament & Golfers (Public)
+      // 1. Fetch Tournament & Golfers
       const { data: tourneyData } = await supabase
         .from('tournaments')
         .select('*')
@@ -80,17 +118,18 @@ export default function HomePage() {
 
       if (tourneyData) {
         setActiveTournament(tourneyData)
-        // Set Live Status immediately
         const now = new Date().getTime()
         const start = new Date(tourneyData.start_date).getTime()
         if (now >= start && tourneyData.status !== 'COMPLETED') setIsLive(true)
       }
 
+      // UPDATED QUERY: Sort by Cost (Desc), THEN by World Rank (Asc)
       const { data: allGolfers } = await supabase
         .from('golfers')
         .select('*')
         .eq('active', true)
         .order('cost', { ascending: false })
+        .order('world_rank', { ascending: true }) // Secondary Sort: Lower rank # is better
 
       if (allGolfers) setGolfers(allGolfers)
 
@@ -98,12 +137,11 @@ export default function HomePage() {
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       setUser(currentUser)
 
-      // Restore Draft from LocalStorage if exists
+      // Restore Draft
       const savedDraft = localStorage.getItem('pendingDraft')
       if (savedDraft) setDraftTeam(JSON.parse(savedDraft))
 
       if (currentUser) {
-        // Fetch Profile
         const { data: profile } = await supabase
             .from('profiles')
             .select('team_name, manager_name')
@@ -116,7 +154,6 @@ export default function HomePage() {
             setDraftManager(profile.manager_name || '')
         }
 
-        // Fetch Stats
         const { data: standings } = await supabase
             .from('season_leaderboard')
             .select('total_season_points')
@@ -125,7 +162,6 @@ export default function HomePage() {
         
         if (standings) setSeasonPoints(standings.total_season_points)
 
-        // Fetch Roster
         const { data: roster } = await supabase
             .from('season_rosters')
             .select(`
@@ -151,7 +187,6 @@ export default function HomePage() {
     }
 
     init()
-    // Empty dependency array = RUNS ONLY ONCE on mount. No loops.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) 
 
@@ -193,7 +228,7 @@ export default function HomePage() {
             user_id: user.id,
             player_1_id: draftTeam[0].id, 
             player_2_id: draftTeam[1].id, 
-            player_3_id: draftTeam[2].id,
+            player_3_id: draftTeam[2].id, 
             player_4_id: draftTeam[3].id, 
             player_5_id: draftTeam[4].id, 
             player_6_id: draftTeam[5].id,
@@ -205,7 +240,6 @@ export default function HomePage() {
 
         if (rosterError) throw rosterError
         
-        // Clean up and reload
         localStorage.removeItem('pendingDraft')
         window.location.reload()
 
@@ -217,7 +251,16 @@ export default function HomePage() {
   }
 
   const currentSpend = draftTeam.reduce((sum, p) => sum + p.cost, 0)
-  const filteredGolfers = golfers.filter(g => g.name.toLowerCase().includes(search.toLowerCase()))
+  
+  // FILTER LOGIC
+  const uniqueNations = Array.from(new Set(golfers.map(g => g.flag).filter(Boolean)))
+    .sort((a, b) => getCountryName(a).localeCompare(getCountryName(b)))
+  
+  const filteredGolfers = golfers.filter(g => {
+    const matchesSearch = g.name.toLowerCase().includes(search.toLowerCase())
+    const matchesNation = filterNation === 'All' || g.flag === filterNation
+    return matchesSearch && matchesNation
+  })
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen text-green-800 font-display text-2xl animate-pulse">
@@ -248,8 +291,6 @@ export default function HomePage() {
                 
                 {/* BUTTON CONTAINER */}
                 <div className="flex flex-col items-center gap-5 animate-in slide-in-from-bottom-10 fade-in duration-700 delay-300">
-                    
-                    {/* Row 1: Primary Actions */}
                     <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto justify-center">
                         <Link 
                             href="/login" 
@@ -257,7 +298,6 @@ export default function HomePage() {
                         >
                             Draft My Team
                         </Link>
-
                         <Link 
                             href="/login" 
                             className="w-full sm:w-auto border-2 border-white/20 text-white font-bold uppercase tracking-widest px-10 py-4 rounded-full hover:bg-white/10 transition-all"
@@ -265,15 +305,12 @@ export default function HomePage() {
                             Log In
                         </Link>
                     </div>
-
-                    {/* Row 2: Secondary Action */}
                     <Link 
                         href="/rules" 
                         className="text-yellow-500 font-bold uppercase tracking-widest text-xs hover:text-white transition-colors border-b border-transparent hover:border-yellow-500 pb-1"
                     >
                         How to Play &rarr;
                     </Link>
-
                 </div>
 
                 {/* STATS FOOTER */}
@@ -410,7 +447,7 @@ export default function HomePage() {
       </div>
       <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Left Column */}
+        {/* Left Column: Draft List */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
             <h2 className="font-display text-2xl text-green-800 mb-4 uppercase tracking-wide">Team Details</h2>
@@ -420,14 +457,32 @@ export default function HomePage() {
             </div>
           </div>
           <div className="bg-white rounded-2xl shadow-md overflow-hidden h-[600px] flex flex-col">
-            <div className="p-4 border-b bg-gray-50">
-              <input type="text" placeholder="🔍 Search Golfers..." className="w-full p-3 border border-gray-200 rounded-xl shadow-inner focus:ring-2 focus:ring-green-500 outline-none transition" onChange={(e) => setSearch(e.target.value)} />
+            
+            {/* Search & Nation Filter Row */}
+            <div className="p-4 border-b bg-gray-50 flex gap-2">
+              <input 
+                type="text" 
+                placeholder="🔍 Search Golfers..." 
+                className="flex-1 p-3 border border-gray-200 rounded-xl shadow-inner focus:ring-2 focus:ring-green-500 outline-none transition bg-white" 
+                onChange={(e) => setSearch(e.target.value)} 
+              />
+              <select 
+                value={filterNation}
+                onChange={(e) => setFilterNation(e.target.value)}
+                className="p-3 border border-gray-200 rounded-xl shadow-inner focus:ring-2 focus:ring-green-500 outline-none bg-white text-gray-700 min-w-[120px]"
+              >
+                <option value="All">All Nations</option>
+                {uniqueNations.map(flag => (
+                    <option key={flag} value={flag}>{getCountryName(flag)}</option>
+                ))}
+              </select>
             </div>
+
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {filteredGolfers.map((p) => {
                 const isSelected = draftTeam.some(dt => dt.id === p.id)
                 return (
-                  <div key={p.id} className={`flex justify-between items-center p-4 rounded-xl border transition-all ${isSelected ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white border-gray-50 hover:border-green-300'}`}>
+                  <div key={p.id} className={`flex justify-between items-center p-4 rounded-xl border transition-all ${isSelected ? 'bg-green-50 border-green-200' : 'bg-white border-gray-50 hover:border-green-300'}`}>
                     <div className="flex items-center gap-4">
                       <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center text-[10px] font-black text-gray-400">#{p.world_rank}</div>
                       <div className="flex items-center">
@@ -437,7 +492,22 @@ export default function HomePage() {
                     </div>
                     <div className="flex items-center gap-6">
                       <span className="font-display text-xl text-green-700">${p.cost.toFixed(1)}m</span>
-                      <button onClick={() => addPlayer(p)} disabled={isSelected} className="h-10 w-10 rounded-full bg-green-600 text-white flex items-center justify-center hover:bg-green-700 shadow-lg">+</button>
+                      
+                      {isSelected ? (
+                        <button 
+                            onClick={() => removePlayer(p.id)} 
+                            className="h-10 w-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 shadow-sm border border-red-200 font-bold transition-all"
+                        >
+                            ✕
+                        </button>
+                      ) : (
+                        <button 
+                            onClick={() => addPlayer(p)} 
+                            className="h-10 w-10 rounded-full bg-green-600 text-white flex items-center justify-center hover:bg-green-700 shadow-lg font-bold transition-all"
+                        >
+                            +
+                        </button>
+                      )}
                     </div>
                   </div>
                 )
@@ -446,7 +516,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Right Column */}
+        {/* Right Column: Squad Sidebar */}
         <div className="lg:col-span-1">
           <div className="bg-white p-8 rounded-2xl shadow-2xl border border-green-50 sticky top-24">
             <h2 className="font-display text-2xl text-gray-800 mb-6 border-b pb-4 uppercase tracking-widest">Your Squad</h2>
@@ -464,7 +534,10 @@ export default function HomePage() {
             <div className="space-y-3 min-h-[250px]">
               {draftTeam.map((p) => (
                 <div key={p.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-xl border border-gray-100 group">
-                  <span className="font-bold text-gray-700">{p.name}</span>
+                  <div className="flex flex-col">
+                      <span className="font-bold text-gray-700 leading-tight">{p.name}</span>
+                      <span className="text-[10px] text-green-600 font-bold uppercase tracking-wider">${p.cost.toFixed(1)}m</span>
+                  </div>
                   <button onClick={() => removePlayer(p.id)} className="text-gray-300 hover:text-red-500 transition text-xl">×</button>
                 </div>
               ))}
