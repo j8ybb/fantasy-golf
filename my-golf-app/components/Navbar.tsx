@@ -21,9 +21,6 @@ export default function Navbar() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
        setUser(session?.user ?? null)
-       if (event === 'SIGNED_OUT') {
-         router.refresh()
-       }
     })
 
     return () => subscription.unsubscribe()
@@ -32,8 +29,9 @@ export default function Navbar() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     setIsMobileMenuOpen(false)
-    router.refresh()
-    router.push('/')
+    
+    // FORCE RELOAD: This clears all React state and ensures the Landing Page appears
+    window.location.href = '/' 
   }
 
   return (
