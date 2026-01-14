@@ -87,10 +87,10 @@ export default function HomePage() {
   const BUDGET = 30.0
   const MAX_PLAYERS = 6
 
-  // --- HELPER: FORCE 10AM UTC DEADLINE ---
+  // --- HELPER: FORCE 5PM UTC DEADLINE ---
   const getDeadline = (dateStr: string) => {
     const datePart = dateStr.split('T')[0]
-    return new Date(`${datePart}T10:00:00Z`).getTime()
+    return new Date(`${datePart}T17:00:00Z`).getTime()
   }
 
   // --- TIMER LOGIC ---

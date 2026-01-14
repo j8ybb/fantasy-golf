@@ -34,10 +34,10 @@ export default function MyTeam() {
   const supabase = createClient()
   const router = useRouter()
 
-  // --- HELPER: FORCE 10AM UTC DEADLINE ---
+  // --- HELPER: FORCE 5PM UTC DEADLINE ---
   const getDeadline = (dateStr: string) => {
     const datePart = dateStr.split('T')[0]
-    return new Date(`${datePart}T10:00:00Z`).getTime()
+    return new Date(`${datePart}T17:00:00Z`).getTime()
   }
 
   const calculateTimeLeft = useCallback(() => {
