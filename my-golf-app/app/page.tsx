@@ -16,7 +16,7 @@ type Golfer = {
 export default function HomePage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false) // New state for button loading
+  const [isSubmitting, setIsSubmitting] = useState(false)
   
   // Team Data
   const [existingTeam, setExistingTeam] = useState<Golfer[] | null>(null)
@@ -49,7 +49,6 @@ export default function HomePage() {
     if (!tournament) return
     const now = new Date().getTime()
     const start = new Date(tournament.start_date).getTime()
-    
     if (now >= start && tournament.status !== 'COMPLETED') {
       setIsLive(true)
       setTimeLeft(null)
@@ -63,9 +62,7 @@ export default function HomePage() {
     const now = new Date().getTime()
     const target = new Date(activeTournament.start_date).getTime()
     const difference = target - now
-
     if (difference <= 0) return null
-
     return {
       days: Math.floor(difference / (1000 * 60 * 60 * 24)),
       hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
@@ -73,68 +70,55 @@ export default function HomePage() {
     }
   }, [activeTournament, isLive])
 
-  useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+  // --- DATA FETCHING ---
+  const fetchData = useCallback(async (currentUser: any) => {
+    // 1. Get Profile
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('team_name, manager_name')
+        .eq('id', currentUser.id)
+        .single()
+    
+    if (profile) {
+        setMyTeamName(profile.team_name)
+        setDraftName(profile.team_name || '')
+        setDraftManager(profile.manager_name || '')
+    }
 
-      // RESTORE DRAFT: If they just logged in, check for a saved team
-      const savedDraft = localStorage.getItem('pendingDraft')
-      if (savedDraft) {
-        setDraftTeam(JSON.parse(savedDraft))
-        localStorage.removeItem('pendingDraft')
-        // We keep it in storage until successful submission just in case
-      }
+    // 2. Get Stats
+    const { data: standings } = await supabase
+        .from('season_leaderboard')
+        .select('total_season_points')
+        .eq('user_id', currentUser.id)
+        .maybeSingle()
 
-      if (user) {
-        // 1. Get Profile (Team Name)
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('team_name, manager_name')
-          .eq('id', user.id)
-          .single()
-        
-        if (profile) {
-            setMyTeamName(profile.team_name)
-            // Pre-fill draft inputs if they are editing
-            setDraftName(profile.team_name || '')
-            setDraftManager(profile.manager_name || '')
-        }
+    if (standings) setSeasonPoints(standings.total_season_points)
 
-        // 2. Get Live Stats
-        const { data: standings } = await supabase
-          .from('season_leaderboard')
-          .select('total_season_points')
-          .eq('user_id', user.id)
-          .maybeSingle()
-
-        if (standings) {
-            setSeasonPoints(standings.total_season_points)
-        }
-
-        // 3. Get Roster
-        const { data: roster } = await supabase
-          .from('season_rosters')
-          .select(`
+    // 3. Get Roster
+    const { data: roster } = await supabase
+        .from('season_rosters')
+        .select(`
             player_1:golfers!season_rosters_player_1_id_fkey(*),
             player_2:golfers!season_rosters_player_2_id_fkey(*),
             player_3:golfers!season_rosters_player_3_id_fkey(*),
             player_4:golfers!season_rosters_player_4_id_fkey(*),
             player_5:golfers!season_rosters_player_5_id_fkey(*),
             player_6:golfers!season_rosters_player_6_id_fkey(*)
-          `)
-          .eq('user_id', user.id)
-          .maybeSingle() // changed from single() to avoid errors if no roster yet
+        `)
+        .eq('user_id', currentUser.id)
+        .maybeSingle()
 
-        if (roster) {
-          setExistingTeam([
+    if (roster) {
+        setExistingTeam([
             roster.player_1, roster.player_2, roster.player_3,
             roster.player_4, roster.player_5, roster.player_6
-          ] as any)
-        }
-      }
+        ] as any)
+    }
+  }, [supabase])
 
-      // 4. Get Upcoming Tournament
+  useEffect(() => {
+    const init = async () => {
+      // 1. General Public Data (Golfers/Tournament) - Fetch even if guest
       const { data: tourneyData } = await supabase
         .from('tournaments')
         .select('*')
@@ -148,7 +132,6 @@ export default function HomePage() {
         calculateStatus(tourneyData)
       }
 
-      // 5. Get Golfers for Draft
       const { data: allGolfers } = await supabase
         .from('golfers')
         .select('*')
@@ -156,10 +139,34 @@ export default function HomePage() {
         .order('cost', { ascending: false })
 
       if (allGolfers) setGolfers(allGolfers)
+
+      // 2. User Specific Data
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      setUser(currentUser)
+
+      if (currentUser) {
+         await fetchData(currentUser)
+      }
+      
       setLoading(false)
     }
+
     init()
-  }, [supabase, calculateStatus])
+
+    // 3. Listen for Auth Changes (e.g. Email Confirmation Redirect)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+            setUser(session.user)
+            await fetchData(session.user)
+        }
+        if (event === 'SIGNED_OUT') {
+            setUser(null)
+            setExistingTeam(null)
+        }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [supabase, calculateStatus, fetchData])
 
   useEffect(() => {
     if (!activeTournament || isLive) return
@@ -175,7 +182,7 @@ export default function HomePage() {
     return today >= new Date('2026-03-16T18:00:00') && today <= new Date('2026-04-09T07:00:00')
   }
 
-  // --- HELPERS ---
+  // --- ACTIONS ---
   const addPlayer = (player: Golfer) => {
     if (draftTeam.find((p) => p.id === player.id)) return alert('Already in team!')
     if (draftTeam.length >= MAX_PLAYERS) return alert('Team full (6 players max)')
@@ -187,24 +194,13 @@ export default function HomePage() {
     setDraftTeam(draftTeam.filter((p) => p.id !== playerId))
   }
 
-  // --- FIXED SUBMIT FUNCTION ---
   const submitTeam = async () => {
-    // 1. Handle Logged Out Users
-    if (!user) {
-        // Save draft to storage so it survives the login redirect
-        localStorage.setItem('pendingDraft', JSON.stringify(draftTeam))
-        return router.push('/login')
-    }
-
-    // 2. Validation
-    if (!draftName.trim() || !draftManager.trim()) {
-        return alert('Please enter both Team and Manager names!')
-    }
+    if (!user) return router.push('/login')
+    if (!draftName.trim() || !draftManager.trim()) return alert('Please enter both Team and Manager names!')
 
     setIsSubmitting(true)
 
     try {
-        // 3. Update Profile
         const { error: profileError } = await supabase
             .from('profiles')
             .update({ team_name: draftName, manager_name: draftManager })
@@ -212,7 +208,6 @@ export default function HomePage() {
 
         if (profileError) throw profileError
 
-        // 4. Save Roster
         const payload = {
             user_id: user.id,
             player_1_id: draftTeam[0].id, 
@@ -228,9 +223,6 @@ export default function HomePage() {
             .upsert(payload)
 
         if (rosterError) throw rosterError
-
-        // 5. Success - Clear saved draft and reload
-        localStorage.removeItem('pendingDraft')
         window.location.reload()
 
     } catch (error: any) {
@@ -249,7 +241,64 @@ export default function HomePage() {
     </div>
   )
 
-  // --- VIEW 1: DASHBOARD (If team exists) ---
+  // ==========================================
+  // VIEW 1: LANDING PAGE (Guest)
+  // ==========================================
+  if (!user) {
+    return (
+        <div className="min-h-screen bg-green-950 flex flex-col items-center justify-center relative overflow-hidden text-center px-4">
+             {/* Background Decoration */}
+             <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+                <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-yellow-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob"></div>
+                <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-green-500 rounded-full mix-blend-multiply filter blur-[100px] opacity-20 animate-blob animation-delay-2000"></div>
+             </div>
+
+             <div className="relative z-10 max-w-2xl">
+                <p className="text-yellow-500 font-black uppercase tracking-[0.3em] text-sm mb-4 animate-in slide-in-from-bottom-4 fade-in duration-700">Official 2026 Season</p>
+                <h1 className="text-6xl md:text-8xl font-display text-white uppercase tracking-tighter leading-none mb-6 animate-in slide-in-from-bottom-6 fade-in duration-700 delay-100">
+                    Fantasy <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">Fairways</span>
+                </h1>
+                <p className="text-green-100 text-lg md:text-xl font-light mb-10 max-w-lg mx-auto leading-relaxed animate-in slide-in-from-bottom-8 fade-in duration-700 delay-200">
+                    Draft your dream team of 6 golfers. Manage your salary cap. Compete against friends in the ultimate golf fantasy league.
+                </p>
+                
+                <div className="flex flex-col sm:flex-row gap-4 justify-center animate-in slide-in-from-bottom-10 fade-in duration-700 delay-300">
+                    <Link 
+                        href="/login" 
+                        className="bg-yellow-500 text-green-950 font-black uppercase tracking-widest px-10 py-4 rounded-full hover:bg-white transition-all transform hover:scale-105 shadow-xl"
+                    >
+                        Draft My Team
+                    </Link>
+                    <Link 
+                        href="/login" 
+                        className="border-2 border-white/20 text-white font-bold uppercase tracking-widest px-10 py-4 rounded-full hover:bg-white/10 transition-all"
+                    >
+                        Log In
+                    </Link>
+                </div>
+
+                <div className="mt-16 grid grid-cols-3 gap-8 text-center border-t border-white/10 pt-8">
+                    <div>
+                        <p className="text-3xl font-display text-white mb-1">${BUDGET}m</p>
+                        <p className="text-[10px] text-green-400 uppercase tracking-widest">Salary Cap</p>
+                    </div>
+                    <div>
+                        <p className="text-3xl font-display text-white mb-1">{golfers.length}+</p>
+                        <p className="text-[10px] text-green-400 uppercase tracking-widest">Tour Pros</p>
+                    </div>
+                    <div>
+                        <p className="text-3xl font-display text-white mb-1">1</p>
+                        <p className="text-[10px] text-green-400 uppercase tracking-widest">Champion</p>
+                    </div>
+                </div>
+             </div>
+        </div>
+    )
+  }
+
+  // ==========================================
+  // VIEW 2: DASHBOARD (Logged In + Has Team)
+  // ==========================================
   if (existingTeam) {
     return (
       <div className="min-h-screen pb-12 bg-gray-50 font-sans">
@@ -258,7 +307,6 @@ export default function HomePage() {
           
           <div className="max-w-6xl mx-auto py-10 px-6">
             <div className="flex flex-col lg:flex-row justify-between items-center gap-8">
-               
                <div className="w-full lg:w-auto text-center lg:text-left">
                  <h1 className="text-4xl md:text-5xl font-display uppercase tracking-wider text-white leading-tight">
                     {myTeamName || 'My Team'}
@@ -272,8 +320,7 @@ export default function HomePage() {
 
                {/* Stats Grid */}
                <div className="w-full lg:w-auto flex flex-wrap md:flex-nowrap gap-4 items-stretch">
-                 
-                 {/* Tournament Status Box */}
+                 {/* Tournament Status */}
                  {activeTournament && (
                    <div className="bg-black/30 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[240px] text-center flex-1">
                      <p className="text-[10px] font-black uppercase text-green-400 tracking-[0.2em] mb-1">Tournament Status</p>
@@ -297,35 +344,16 @@ export default function HomePage() {
                      </div>
                    </div>
                  )}
-
-                 {/* Points Box */}
+                 {/* Points & Rank */}
                  <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
                    <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Total Points</div>
                    <div className="text-3xl font-display text-white mt-1">{seasonPoints.toLocaleString()}</div>
                  </div>
-
-                 {/* Rank Box */}
                  <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
                      <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Rank</div>
                      <div className="flex items-center justify-center text-3xl font-display text-yellow-400 mt-1 gap-1">
-                        {seasonRank > 0 ? (
-                          <>
-                            {seasonRank}
-                            {rankTrend === 'up' && <span className="text-green-500 text-lg ml-1">▲</span>}
-                            {rankTrend === 'down' && <span className="text-red-500 text-lg ml-1">▼</span>}
-                          </>
-                        ) : (
-                          <span className="text-xl opacity-40 uppercase font-black tracking-tighter">N/A</span>
-                        )}
+                        {seasonRank > 0 ? seasonRank : <span className="text-xl opacity-40 uppercase font-black tracking-tighter">N/A</span>}
                      </div>
-                 </div>
-
-                 {/* Value Box */}
-                 <div className="bg-green-800/50 backdrop-blur-md border border-white/5 rounded-xl p-5 flex flex-col justify-center min-w-[140px] text-center flex-1">
-                   <div className="text-[10px] text-green-200 uppercase tracking-widest font-black mb-1">Team Value</div>
-                   <div className="text-3xl font-display text-white mt-1">
-                     ${existingTeam.reduce((acc, p) => acc + (p.cost || 0), 0).toFixed(1)}m
-                   </div>
                  </div>
                </div>
             </div>
@@ -358,9 +386,6 @@ export default function HomePage() {
               <p className={isTransferWindowOpen() ? 'text-green-800 font-display text-3xl uppercase tracking-widest' : 'text-gray-300 font-display text-2xl uppercase tracking-widest'}>
                 {isTransferWindowOpen() ? 'Transfer Window Open' : 'Transfers Locked'}
               </p>
-              <p className="text-sm mt-2 font-medium italic text-gray-500">
-                {isTransferWindowOpen() ? 'The mid-season window is active.' : 'Window opens after The Players Championship on 16 March 2026.'}
-              </p>
               {isTransferWindowOpen() && (
                 <button className="mt-6 bg-green-700 text-white px-10 py-3 rounded-full font-black uppercase tracking-widest hover:bg-green-800 transition shadow-lg">
                   Manage Transfers
@@ -372,7 +397,9 @@ export default function HomePage() {
     )
   }
 
-  // --- VIEW 2: DRAFT BOARD (If no team exists) ---
+  // ==========================================
+  // VIEW 3: DRAFT BOARD (Logged In + NO Team)
+  // ==========================================
   return (
     <div className="min-h-screen pb-12 font-sans bg-gray-50">
       <div className="bg-green-900 text-white py-12 px-6 shadow-lg border-b-4 border-yellow-500 mb-8">
@@ -383,7 +410,7 @@ export default function HomePage() {
       </div>
       <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Left Column: Input and List */}
+        {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-100">
             <h2 className="font-display text-2xl text-green-800 mb-4 uppercase tracking-wide">Team Details</h2>
@@ -419,7 +446,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Right Column: Squad Sidebar */}
+        {/* Right Column */}
         <div className="lg:col-span-1">
           <div className="bg-white p-8 rounded-2xl shadow-2xl border border-green-50 sticky top-24">
             <h2 className="font-display text-2xl text-gray-800 mb-6 border-b pb-4 uppercase tracking-widest">Your Squad</h2>
@@ -443,7 +470,6 @@ export default function HomePage() {
               ))}
             </div>
             
-            {/* UPDATED SUBMIT BUTTON */}
             <button 
                 onClick={submitTeam} 
                 disabled={draftTeam.length !== 6 || draftTeam.reduce((s, p) => s + p.cost, 0) > BUDGET || isSubmitting} 
