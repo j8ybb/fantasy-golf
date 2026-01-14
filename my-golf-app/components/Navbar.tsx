@@ -97,7 +97,7 @@ export default function Navbar() {
             {user ? (
               <button 
                 onClick={handleLogout}
-                className="bg-red-700/20 border border-red-500 text-red-200 px-4 py-1.5 rounded font-display text-xs tracking-widest hover:bg-red-600 hover:text-white transition"
+                className="bg-yellow-500 text-green-950 px-4 py-1.5 rounded font-display text-xs tracking-widest hover:bg-white transition"
               >
                 LOGOUT
               </button>
@@ -141,7 +141,7 @@ export default function Navbar() {
             
             <div className="pt-6 border-t border-white/10">
               {user ? (
-                <button onClick={handleLogout} className="w-full text-left text-lg font-display uppercase tracking-widest text-red-400">Logout</button>
+                <button onClick={handleLogout} className="w-full text-left text-lg font-display uppercase tracking-widest text-yellow-500">Logout</button>
               ) : (
                 <Link onClick={() => setIsMobileMenuOpen(false)} href="/login" className="block text-lg font-display uppercase tracking-widest text-yellow-500">Login</Link>
               )}
