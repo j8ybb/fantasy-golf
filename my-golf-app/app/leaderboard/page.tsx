@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import { useRouter } from 'next/navigation' // Added for redirecting
 import Link from 'next/link'
 
 type Profile = {
@@ -17,14 +18,22 @@ export default function Leaderboard() {
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const supabase = createClient()
+  const router = useRouter() // Initialize router
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
-      // 1. Get current user to highlight "You"
+      // 1. GATEKEEPER: Check if user is logged in
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) setCurrentUserId(user.id)
+      
+      if (!user) {
+        // Redirect to login if no session found
+        return router.push('/login')
+      }
+      
+      // If user exists, set ID to highlight "You"
+      setCurrentUserId(user.id)
 
-      // 2. Fetch from the VIEW 'season_leaderboard' instead of the 'profiles' table
+      // 2. Fetch from the VIEW 'season_leaderboard'
       const { data, error } = await supabase
         .from('season_leaderboard')
         .select('*')
@@ -35,18 +44,20 @@ export default function Leaderboard() {
       }
 
       if (data) {
-        // Mocking trends for the UI (this can be mapped to real DB columns later)
+        // Map trends for UI flair
         const dataWithTrends = data.map((p, i) => ({
           ...p,
-          id: (p as any).user_id, // Mapping view user_id to id for the key
+          id: (p as any).user_id, 
           rank_trend: i % 3 === 0 ? 'up' : i % 3 === 1 ? 'down' : 'neutral'
         }))
         setProfiles(dataWithTrends as Profile[])
       }
+      
       setLoading(false)
     }
+
     fetchLeaderboard()
-  }, [supabase])
+  }, [supabase, router])
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen text-green-800 font-display text-2xl animate-pulse">
@@ -57,7 +68,7 @@ export default function Leaderboard() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20 font-sans">
       {/* HEADER */}
-      <div className="bg-green-900 text-white py-12 px-6 shadow-xl border-b-4 border-yellow-500 mb-8">
+      <div className="bg-green-950 text-white py-12 px-6 shadow-xl border-b-4 border-yellow-500 mb-8">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-6xl font-display uppercase tracking-wider">League Standings</h1>
           <p className="text-green-200 mt-2 font-black tracking-[0.2em] uppercase text-xs">Official 2026 Leaderboard</p>
@@ -91,8 +102,6 @@ export default function Leaderboard() {
                           <span className={`text-3xl font-display font-bold ${rank <= 3 ? 'text-yellow-600' : 'text-gray-400'}`}>
                             {rank}
                           </span>
-                          
-                          {/* TREND ARROW */}
                           <div className="flex items-center">
                              {profile.rank_trend === 'up' && <span className="text-green-500 text-sm animate-pulse">▲</span>}
                              {profile.rank_trend === 'down' && <span className="text-red-500 text-sm opacity-50">▼</span>}
@@ -145,7 +154,6 @@ export default function Leaderboard() {
           </div>
         </div>
 
-        {/* BACK TO DASHBOARD LINK */}
         <div className="mt-10 text-center">
           <Link 
             href="/" 

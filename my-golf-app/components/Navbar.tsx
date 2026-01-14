@@ -14,8 +14,8 @@ export default function Navbar() {
 
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      const { data: { user: activeUser } } = await supabase.auth.getUser()
+      setUser(activeUser)
     }
     getUser()
 
@@ -54,9 +54,17 @@ export default function Navbar() {
               Home
             </Link>
 
-            <Link href="/team" className="font-display uppercase tracking-widest hover:text-yellow-400 transition-colors text-sm font-medium">
-              Team
-            </Link>
+            {/* PROTECTED LINKS: Only show if user is logged in */}
+            {user && (
+              <>
+                <Link href="/team" className="font-display uppercase tracking-widest hover:text-yellow-400 transition-colors text-sm font-medium">
+                  Team
+                </Link>
+                <Link href="/leaderboard" className="font-display uppercase tracking-widest hover:text-yellow-400 transition-colors text-sm font-medium">
+                  Leaderboard
+                </Link>
+              </>
+            )}
 
             {/* Season Dropdown */}
             <div 
@@ -88,10 +96,6 @@ export default function Navbar() {
                 </div>
               )}
             </div>
-
-            <Link href="/leaderboard" className="font-display uppercase tracking-widest hover:text-yellow-400 transition-colors text-sm font-medium">
-              Leaderboard
-            </Link>
 
             {/* Auth Button */}
             {user ? (
@@ -129,15 +133,20 @@ export default function Navbar() {
         <div className="md:hidden bg-green-900 border-t border-white/10 animate-in slide-in-from-top duration-300">
           <div className="px-6 py-8 space-y-6">
             <Link onClick={() => setIsMobileMenuOpen(false)} href="/" className="block text-lg font-display uppercase tracking-widest">Home</Link>
-            <Link onClick={() => setIsMobileMenuOpen(false)} href="/team" className="block text-lg font-display uppercase tracking-widest">Team</Link>
+            
+            {/* PROTECTED MOBILE LINKS */}
+            {user && (
+              <>
+                <Link onClick={() => setIsMobileMenuOpen(false)} href="/team" className="block text-lg font-display uppercase tracking-widest">Team</Link>
+                <Link onClick={() => setIsMobileMenuOpen(false)} href="/leaderboard" className="block text-lg font-display uppercase tracking-widest">Leaderboard</Link>
+              </>
+            )}
             
             <div className="space-y-4 pt-2 pb-2">
               <p className="text-[10px] font-black uppercase text-yellow-500 tracking-[0.3em]">Season Info</p>
               <Link onClick={() => setIsMobileMenuOpen(false)} href="/season-summary" className="block text-lg font-display uppercase tracking-widest pl-4 border-l-2 border-yellow-500/30">Schedule</Link>
               <Link onClick={() => setIsMobileMenuOpen(false)} href="/rules" className="block text-lg font-display uppercase tracking-widest pl-4 border-l-2 border-yellow-500/30">Rules & Scoring</Link>
             </div>
-
-            <Link onClick={() => setIsMobileMenuOpen(false)} href="/leaderboard" className="block text-lg font-display uppercase tracking-widest">Leaderboard</Link>
             
             <div className="pt-6 border-t border-white/10">
               {user ? (
