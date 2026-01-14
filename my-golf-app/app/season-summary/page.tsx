@@ -30,6 +30,18 @@ export default function SeasonSummaryPage() {
     }).format(amount)
   }
 
+  // Helper to format date as "15 Jan 26" exactly
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    // Using 'short' month and forcing Title Case
+    const month = date.toLocaleString('en-GB', { month: 'short' });
+    const formattedMonth = month.charAt(0).toUpperCase() + month.slice(1).toLowerCase();
+    const year = date.getFullYear().toString().slice(-2);
+    
+    return `${day} ${formattedMonth} ${year}`;
+  }
+
   useEffect(() => {
     const fetchSeasonData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -95,23 +107,21 @@ export default function SeasonSummaryPage() {
             <tbody className="divide-y divide-gray-50">
               {tournaments.map((t) => (
                 <tr key={t.id} className="hover:bg-green-50/40 transition-colors group">
-                  {/* Tournament Logo Column */}
-                  <td className="p-4 w-16">
-                    <div className="w-12 h-12 bg-white rounded-lg border border-gray-100 flex items-center justify-center p-1 shadow-sm overflow-hidden">
+                  <td className="p-4 w-24">
+                    <div className="w-16 h-16 bg-white rounded-lg border border-gray-100 flex items-center justify-center p-0.5 shadow-sm overflow-hidden">
                       {t.logo_url ? (
                         <img 
                           src={t.logo_url} 
                           alt="" 
-                          className="max-w-full max-h-full object-contain"
+                          className="w-full h-full object-contain"
                           onError={(e) => (e.currentTarget.style.visibility = 'hidden')}
                         />
                       ) : (
-                        <span className="text-lg opacity-20">⛳</span>
+                        <span className="text-2xl opacity-20">⛳</span>
                       )}
                     </div>
                   </td>
 
-                  {/* Name & Special Badges Column */}
                   <td className="p-4">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
@@ -127,17 +137,16 @@ export default function SeasonSummaryPage() {
                     </div>
                   </td>
 
-                  {/* Start Date Column */}
-                  <td className="p-4 text-sm text-gray-600 font-semibold italic">
-                    {new Date(t.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {/* Date Column: Title Case formatted */}
+                  <td className="p-4 text-sm text-gray-600 font-bold tracking-tight">
+                    {formatDate(t.start_date)}
                   </td>
 
-                  {/* Prize Pot Column */}
-                  <td className="p-4 font-mono text-sm text-gray-700 font-bold">
+                  {/* Purse Column: Now matches the Date Column font styling */}
+                  <td className="p-4 text-sm text-gray-700 font-bold tracking-tight">
                     {t.prize_pot ? formatCurrency(t.prize_pot) : 'TBD'}
                   </td>
 
-                  {/* Points Earned Column */}
                   <td className="p-4 text-right">
                     {t.points !== null ? (
                       <span className="font-display text-2xl text-green-700 font-bold">{t.points}</span>

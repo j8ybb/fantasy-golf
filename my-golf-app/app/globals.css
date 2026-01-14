@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Replace the 3 @tailwind lines with this if the error persists */
+@import "tailwindcss";
 
 :root {
   --foreground-rgb: 0, 0, 0;
