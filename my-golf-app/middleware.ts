@@ -13,42 +13,21 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
+        getAll() {
+          return request.cookies.getAll()
         },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            request.cookies.set(name, value)
+          )
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
         },
       },
     }
@@ -56,14 +35,21 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // PROTECTED ROUTES LOGIC
-  // If no user is logged in and the path is NOT home, rules, or login...
-  const publicPaths = ['/', '/rules', '/login', '/auth']
-  const isPublicPath = publicPaths.some(path => request.nextUrl.pathname === path)
-  
-  // Also allow static files and images
-  const isStaticFile = request.nextUrl.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico)$/)
+  // --- PROTECTED ROUTES LOGIC ---
+  const path = request.nextUrl.pathname
 
+  // Check against allowed public paths
+  // IMPORTANT: We must allow '/auth' and everything under it (like /auth/callback)
+  const isPublicPath = 
+    path === '/' || 
+    path === '/rules' || 
+    path === '/login' || 
+    path.startsWith('/auth') // This fixes your Google Login issue
+
+  // Also allow static files and images
+  const isStaticFile = path.match(/\.(png|jpg|jpeg|gif|svg|ico)$/)
+
+  // If NOT a user, and NOT a public path, redirect to login
   if (!user && !isPublicPath && !isStaticFile) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
